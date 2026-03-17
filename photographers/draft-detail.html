@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Draft Detail</title>
+<link rel="stylesheet" href="../assets/css/style.css">
+<script defer src="../assets/js/app.js"></script>
+</head>
+<body data-page="draft-detail">
+<div class="topbar home-topbar">
+  <div class="container nav">
+    <a class="brand-lockup home-brand" href="../index.html">
+  <img src="../assets/img/logo.png"" alt="Alvez & Mango logo">
+  <div class="logo-text">
+    <strong>Alvez & Mango</strong>
+    <span>bespoke handmade albums</span>
+  </div>
+</a>
+    <nav class="nav-links home-nav-links">
+      <a href="../index.html">Home</a>
+      <a href="dashboard.html">Dashboard</a>
+      <a href="orders.html">Orders</a>
+      <a href="guest-preview.html">Guest preview</a>
+      <a href="#" onclick="history.back();return false;">Back</a>
+    </nav>
+  </div>
+</div>
+<section class="section">
+  <div class="container"><div id="storageWarning"></div></div>
+  <div class="container">
+    <div id="draftDetailEmpty" class="empty" style="display:none">No draft selected yet. Open a draft from the dashboard or orders page.</div>
+    <div id="draftDetailWrap">
+      <div class="section-head">
+        <div>
+          <div class="kicker">Draft detail</div>
+          <h2 data-project-title>Draft</h2>
+        </div>
+        <div class="action-row">
+          <a class="btn secondary" href="orders.html">All drafts</a>
+          <button class="btn secondary" id="detailDeleteBtn" style="display:none">Delete draft</button>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="panel">
+          <h3 style="font-size:30px;font-family:Georgia,serif;margin:0 0 14px">Project summary</h3>
+          <div class="summary-list">
+            <div class="summary-row"><strong>ID</strong><span data-project-id></span></div>
+            <div class="summary-row"><strong>Album type</strong><span data-project-type></span></div>
+            <div class="summary-row"><strong>Size</strong><span data-project-size></span></div>
+            <div class="summary-row"><strong>Cover</strong><span data-project-cover></span></div>
+            <div class="summary-row"><strong>Material</strong><span data-project-cover-material></span></div>
+            <div class="summary-row"><strong>Spreads</strong><span data-project-spreads></span></div>
+            <div class="summary-row"><strong>Status</strong><span data-project-status></span></div>
+            <div class="summary-row"><strong>Created</strong><span data-project-created></span></div>
+            <div class="summary-row"><strong>Estimate</strong><span id="detailEstimate"></span></div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="kicker">Share</div>
+          <h3 style="font-size:30px;font-family:Georgia,serif;margin:8px 0 10px">Share with your photographer</h3>
+          <p class="small">Use this to demonstrate how a couple or guest could send a selected draft to their photographer.</p>
+          <form id="detailShareForm">
+            <div class="field">
+              <label>Photographer email</label>
+              <input id="detailShareEmail" type="email" placeholder="photographer@email.com" required>
+            </div>
+            <div class="hero-actions">
+              <button type="submit">Share draft</button>
+              <button type="button" class="btn secondary" onclick="convertGuestDraft()">Convert to photographer project</button>
+              <a class="btn secondary" href="guest-order.html">Create another guest draft</a>
+            </div>
+          </form>
+          <div id="detailShareMsg" style="margin-top:16px"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+</body>
+</html>

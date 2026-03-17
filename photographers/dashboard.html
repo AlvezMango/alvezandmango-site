@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard</title>
+<link rel="stylesheet" href="../assets/css/style.css">
+<script defer src="../assets/js/app.js"></script>
+</head>
+<body data-page="dashboard">
+
+<div class="topbar home-topbar">
+  <div class="container nav">
+    <a class="brand-lockup home-brand" href="../index.html">
+  <img src="../assets/img/logo.png"" alt="Alvez & Mango logo">
+  <div class="logo-text">
+    <strong>Alvez & Mango</strong>
+    <span>bespoke handmade albums</span>
+  </div>
+</a>
+    <nav class="nav-links home-nav-links">
+      <a href="../index.html">Home</a>
+      <a href="dashboard.html">Dashboard</a>
+      <a href="new-order.html">New order</a>
+      <a href="orders.html">Orders</a>
+      <a href="guest-preview.html">Guest preview</a>
+      <a href="#" onclick="signOut();return false;">Sign out</a>
+    </nav>
+  </div>
+</div>
+<section class="section">
+  <div class="container"><div id="storageWarning"></div></div>
+  <div class="container">
+    <div class="section-head">
+      <div><div class="kicker">Welcome back</div><h2>Studio dashboard for <span data-studio-name></span></h2></div>
+      <div class="hero-actions"><a class="btn" href="new-order.html">Create new album order</a><a class="btn secondary" href="orders.html">View all orders</a></div>
+    </div>
+    <div class="note-strip" style="margin-bottom:18px">Photographer notifications: shared client drafts can be opened and converted into active projects.</div><div class="stat-row">
+      <div class="stat"><strong id="projectCount">0</strong><span class="small">Total projects</span></div>
+      <div class="stat"><strong id="draftCount">0</strong><span class="small">Drafts</span></div>
+      <div class="stat"><strong id="reviewCount">0</strong><span class="small">In review / active</span></div>
+    </div>
+  </div>
+</section>
+<section class="section" style="padding-top:0">
+  <div class="container dashboard-grid">
+    <aside class="sidebar">
+      <a class="active" href="dashboard.html">Overview</a>
+      <a href="new-order.html">New album order</a>
+      <a href="orders.html">Orders</a>
+    </aside>
+    <main class="panel">
+      <div class="kicker">Recent projects</div>
+      <h3 style="font-size:30px;font-family:Georgia,serif;margin:8px 0 18px">Your albums</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>ID</th><th>Project</th><th>Album</th><th>Size</th><th>Cover</th><th>Status</th><th>Created</th><th>Action</th></tr></thead>
+          <tbody id="projectRows"></tbody>
+        </table>
+      </div>
+    </main>
+  </div>
+</section>
+
+</body>
+</html>

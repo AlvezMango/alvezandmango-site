@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Guest Draft Editor</title>
+<link rel="stylesheet" href="../assets/css/style.css">
+<script defer src="../assets/js/app.js"></script>
+</head>
+<body data-page="guest-draft-edit">
+<div class="topbar home-topbar">
+  <div class="container nav">
+    <a class="brand-lockup home-brand" href="../index.html">
+  <img src="../assets/img/logo.png"" alt="Alvez & Mango logo">
+  <div class="logo-text">
+    <strong>Alvez & Mango</strong>
+    <span>bespoke handmade albums</span>
+  </div>
+</a>
+    <nav class="nav-links home-nav-links">
+      <a href="../index.html">Home</a>
+      <a href="guest-preview.html">Guest preview</a>
+      <a href="orders.html">My drafts</a>
+      <a href="#" onclick="history.back();return false;">Back</a>
+    </nav>
+  </div>
+</div>
+<section class="section">
+  <div class="container"><div id="storageWarning"></div></div>
+  <div class="container">
+    <div id="guestDraftEmpty" class="empty" style="display:none">No guest draft selected yet. Open a draft from your drafts page.</div>
+    <div id="guestDraftWrap">
+      <div class="section-head">
+        <div>
+          <div class="kicker">Guest draft editor</div>
+          <h2 data-project-title>Draft</h2>
+          <div class="small">Project ID: <span data-project-id></span> · Status: <span data-project-status></span> · Created: <span data-project-created></span></div>
+        </div>
+        <div class="hero-actions">
+          <button type="button" class="btn secondary" id="detailDeleteBtn" style="display:none">Delete draft</button>
+        </div>
+      </div>
+
+      <div class="guest-edit-grid">
+        <form class="panel" id="guestDraftForm" data-upgraded="1"><input type="hidden" name="albumType" value="Album"><div class="form-grid"><div class="field"><label>Your names / project title</label><input name="projectTitle" placeholder="e.g. Sophia & Daniel" required></div><div class="field"><label>Album or Set</label><select name="selectionType"><option value="Album">Album</option><option value="Set">Set</option></select></div><div class="field"><label>Size</label><select name="size"><option value="30×30">30×30</option><option value="40×30">40×30</option><option value="35×25">35×25</option><option value="30×20">30×20</option><option value="20×20">20×20</option><option value="20×15">20×15</option></select></div><div class="field"><label>Number of Spreads</label><input name="spreads" type="number" min="10" max="35" value="20"></div></div><div class="package-builder"><div class="package-row"><div><div class="package-label">Album</div><div class="small">Chosen album from the size and spread options above.</div></div><div class="package-meta"><strong data-main-size>30×30</strong></div><div class="package-meta"><label>Quantity</label><input name="quantity" type="number" min="1" value="1"></div><div class="package-meta package-summary" data-main-package-summary>30×30 · 20 spreads</div></div><div class="package-row" data-replica-row><div><div class="package-label">Replicas</div><div class="small">Enabled when Set is selected.</div></div><div class="package-meta"><label>Size</label><select name="replicaSize"><option value="20×20">20×20</option></select></div><div class="package-meta"><label>Quantity</label><input name="replicaQty" type="number" min="0" value="2"></div><div class="package-meta package-summary" data-replica-summary>20×20 · 20 spreads</div></div></div><hr class="sep"><div><label>Cover options</label><input type="hidden" name="cover" id="coverInput" value="Linen Sand"><input type="hidden" name="coverMaterial" id="coverMaterialInput" value="Linen"><div class="small" style="margin-top:10px">Choose one of the 4 cover material groups below, then select a swatch.</div><div id="materialTabs" class="category-row"></div><div class="cover-trigger cover-preview-panel" style="margin-top:12px"><div class="cover-trigger-preview"><div class="cover-thumb" id="selectedCoverThumb"></div><div><strong id="selectedCoverName">Linen Sand</strong><div class="small" id="selectedCoverMaterial">Linen</div></div></div></div><div class="cover-extra-options"><div class="form-grid" style="margin-top:18px"><div class="field"><label>Print on Cover</label><select name="printOnCover"><option value="no">No</option><option value="yes">Yes</option></select><div id="printCoverUploadWrap" style="display:none;margin-top:10px"><input type="file" name="printCoverFile" accept=".pdf,.jpg,.jpeg,image/jpeg,application/pdf"></div></div><div class="field"><label>Picture Window</label><select name="pictureWindow"><option value="no">No</option><option value="yes">Yes</option></select><div id="pictureWindowUploadWrap" style="display:none;margin-top:10px"><input type="file" name="pictureWindowFile" accept=".jpg,.jpeg,image/jpeg"></div></div></div></div><div class="modal-backdrop" id="coverModal"><div class="modal"><div class="modal-head"><div><div class="kicker">Cover swatches</div><h3 style="font-size:30px;font-family:Georgia,serif;margin:8px 0 4px" id="coverModalTitle">Linen colours</h3><div class="small" id="coverModalSubtitle">Choose from 8 named swatches.</div></div><button type="button" class="icon-btn" id="closeCoverModal">Close</button></div><div id="coverSwatches" class="swatch-grid-12"></div></div></div></div><div class="hero-actions" style="margin-top:20px"><button type="submit">Save Project</button></div><div id="guestEditorMsg" style="margin-top:16px"></div></form>
+
+        <div>
+          <div class="panel">
+            <div class="kicker">Preview quote</div>
+            <h3 style="font-size:30px;font-family:Georgia,serif;margin:8px 0 6px">Pricing hidden</h3>
+            <div style="font-size:52px;font-family:Georgia,serif;margin:24px 0 10px">—</div>
+            <div class="small">Quote available through your photographer.</div>
+          </div>
+
+          <div class="panel" style="margin-top:18px">
+            <div class="kicker">Chosen details</div>
+            <h3 style="font-size:30px;font-family:Georgia,serif;margin:8px 0 14px">Draft summary</h3>
+            <div class="summary-list">
+              <div class="summary-row"><strong>Album type</strong><span data-side-selection-type></span></div>
+              <div class="summary-row"><strong>Size</strong><span data-side-size></span></div>
+              <div class="summary-row"><strong>Main quantity</strong><span data-side-main-qty></span></div>
+              <div class="summary-row"><strong>Replica size</strong><span data-side-replica-size></span></div>
+              <div class="summary-row"><strong>Replica quantity</strong><span data-side-replica-qty></span></div>
+              <div class="summary-row"><strong>Cover</strong><span data-side-cover></span></div>
+              <div class="summary-row"><strong>Material</strong><span data-side-material></span></div>
+              <div class="summary-row"><strong>Spreads</strong><span data-side-spreads></span></div>
+              <div class="summary-row"><strong>Print on cover</strong><span data-side-print></span></div>
+              <div class="summary-row"><strong>Picture window</strong><span data-side-window></span></div>
+            </div>
+          </div>
+
+          <div class="panel" style="margin-top:18px">
+            <div class="kicker">Share</div>
+            <h3 style="font-size:30px;font-family:Georgia,serif;margin:8px 0 10px">Share with photographer</h3>
+            <p class="small">After making changes, send this saved preview to your photographer.</p>
+            <form id="detailShareForm">
+              <div class="field">
+                <label>Photographer email</label>
+                <input id="detailShareEmail" type="email" placeholder="photographer@email.com" required>
+              </div>
+              <div class="hero-actions">
+                <button type="submit">Share with photographer</button>
+              </div>
+            </form>
+            <div id="detailShareMsg" style="margin-top:16px"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+</body>
+</html>

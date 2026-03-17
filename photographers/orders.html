@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Orders</title>
+<link rel="stylesheet" href="../assets/css/style.css">
+<script defer src="../assets/js/app.js"></script>
+</head>
+<body data-page="orders">
+
+<div class="topbar home-topbar">
+  <div class="container nav">
+    <a class="brand-lockup home-brand" href="../index.html">
+  <img src="../assets/img/logo.png"" alt="Alvez & Mango logo">
+  <div class="logo-text">
+    <strong>Alvez & Mango</strong>
+    <span>bespoke handmade albums</span>
+  </div>
+</a>
+    <nav class="nav-links home-nav-links">
+      <a href="../index.html">Home</a>
+      <a href="dashboard.html">Dashboard</a>
+      <a href="new-order.html">New order</a>
+      <a href="orders.html">Orders</a>
+      <a href="guest-preview.html">Guest preview</a>
+      <a href="#" onclick="signOut();return false;">Sign out</a>
+    </nav>
+  </div>
+</div>
+<section class="section">
+  <div class="container"><div id="storageWarning"></div></div>
+  <div class="container">
+    <div class="note-strip" style="margin-bottom:18px">Orders page now supports the photographer workflow: open a shared client draft, modify it, upload spreads, and review pricing.</div><div class="section-head">
+      <div><div class="kicker">Orders</div><h2>All projects for <span data-studio-name></span></h2></div>
+      <div class="hero-actions"><a class="btn" href="new-order.html">New order</a><a class="btn secondary" href="dashboard.html">Dashboard</a></div>
+    </div>
+    <div id="ordersList"></div>
+  </div>
+</section>
+
+</body>
+</html>
