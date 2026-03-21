@@ -538,9 +538,56 @@ function setupCoverModal(){
   }
 }
 
-function setupDashboard(){
+async function loadDraftsFromSupabase(user){
+  const client = getSupabaseClient();
+  if(!client) return [];
+
+  const { data, error } = await client
+    .from('drafts')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if(error){
+    console.error("Supabase load error:", error);
+    return [];
+  }
+
+  const rows = Array.isArray(data) ? data : [];
+  return rows.filter(d => {
+    if(user.role === 'photographer'){
+      const profileName = (user.photographerName || '').trim().toLowerCase();
+      const studioName = (user.studioName || '').trim().toLowerCase();
+      const draftPhotographer = String(d.photographer_name || '').trim().toLowerCase();
+      if(profileName && draftPhotographer === profileName) return true;
+      if(studioName && draftPhotographer === studioName) return true;
+      return false;
+    }
+    if(user.role === 'guest'){
+      return String(d.guest_email || '').trim().toLowerCase() === String(user.email || '').trim().toLowerCase();
+    }
+    return true;
+  }).map(d => ({
+    id: d.id,
+    title: d.draft_name || 'Untitled Project',
+    albumType: d.album_type || 'Album',
+    selectionType: d.album_type || 'Album',
+    size: d.album_size || '—',
+    cover: d.cover_color || '—',
+    coverMaterial: d.cover_material || '—',
+    spreads: d.spreads || 0,
+    status: ({draft:'Draft', pending:'In review', approved:'Approved', in_production:'In production', delivered:'Shipped'})[String(d.status || '').toLowerCase()] || 'Draft',
+    created: d.created_at ? String(d.created_at).slice(0,10) : '—',
+    price: Number(d.total_price || 0),
+    remoteId: d.id
+  }));
+}
+
+async function setupDashboard(){
   const user=ensureAuth(); if(!user) return;
-  const list=readProjects().filter(p => p.userEmail===user.email).sort((a,b)=>String(b.created||'').localeCompare(String(a.created||'')) || String(b.id||'').localeCompare(String(a.id||'')));
+  let list = await loadDraftsFromSupabase(user);
+  if(!list.length){
+    list = readProjects().filter(p => p.userEmail===user.email).sort((a,b)=>String(b.created||'').localeCompare(String(a.created||'')) || String(b.id||'').localeCompare(String(a.id||'')));
+  }
   const body=document.getElementById('projectRows');
   if(document.getElementById('projectCount')) document.getElementById('projectCount').textContent=list.length;
   if(document.getElementById('draftCount')) document.getElementById('draftCount').textContent=list.filter(p=>p.status==='Draft').length;
