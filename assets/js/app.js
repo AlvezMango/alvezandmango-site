@@ -649,7 +649,7 @@ function setupNewOrder(){
   form.addEventListener('input', updateQuote);
   form.addEventListener('change', updateQuote);
   updateQuote();
-  form.addEventListener('submit', function(e){
+  form.addEventListener('submit', async function(e){
     e.preventDefault();
     const submitter = e.submitter;
     const action = submitter && submitter.value ? submitter.value : 'save';
