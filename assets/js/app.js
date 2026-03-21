@@ -70,7 +70,7 @@ function ensureAuth(){
 function setupRegister(){
   const form=document.getElementById('registerForm');
   if(!form) return;
-  form.addEventListener('submit', function(e){
+  form.addEventListener('submit', async function(e){
     e.preventDefault();
     if(!storageAvailable()){ showMessage('registerMsg','Local storage is unavailable in this browser, so the mockup cannot save accounts.', true); return; }
     const data=Object.fromEntries(new FormData(form).entries());
