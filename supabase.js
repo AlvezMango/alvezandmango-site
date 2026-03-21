@@ -3,7 +3,7 @@ const SUPABASE_KEY = "sb_publishable_fMXuCisXnwyFqYhBuQrrFg_38HgpDgK";
 
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-async function saveDraft() {
+window.saveDraft = async function () {
   const { data, error } = await supabase
     .from('drafts')
     .insert([
@@ -22,4 +22,4 @@ async function saveDraft() {
     console.log("Saved:", data);
     alert("Draft saved successfully!");
   }
-}
+};
