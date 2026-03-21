@@ -1,7 +1,55 @@
-const SUPABASE_URL = "https://jbwlwbawssjimugtayts.supabase.co";
-const SUPABASE_KEY = "sb_publishable_fMXuCisXnwyFqYhBuQrrFg_38HgpDgK";
 
-const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+function getSupabaseClient(){
+  if(window.supabaseClient) return window.supabaseClient;
+  if(window.supabase && window.SUPABASE_URL && window.SUPABASE_KEY){
+    try{
+      window.supabaseClient = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_KEY);
+      return window.supabaseClient;
+    }catch(e){
+      console.error('Unable to initialise Supabase client', e);
+      return null;
+    }
+  }
+  return null;
+}
+
+async function saveDraftToSupabase(item, user){
+  const client = getSupabaseClient();
+  if(!client) return { skipped:true };
+  const statusMap = {
+    'Draft':'draft',
+    'In review':'pending',
+    'Approved':'approved',
+    'In production':'in_production',
+    'Shipped':'delivered'
+  };
+  const payload = {
+    draft_name: item.title || 'Untitled Project',
+    status: statusMap[item.status] || 'draft',
+    album_type: item.selectionType || item.albumType || 'Album',
+    album_size: item.size || null,
+    cover_material: item.coverMaterial || null,
+    cover_color: item.cover || null,
+    spreads: Number(item.spreads || 0) || null,
+    has_parent_albums: item.selectionType === 'Set',
+    parent_album_type: item.selectionType === 'Set' ? (item.replicaSize || null) : null,
+    parent_album_qty: item.selectionType === 'Set' ? Number(item.replicaQty || 0) : 0,
+    has_presentation_box: false,
+    total_price: Number(item.price || 0) || 0,
+    photographer_name: user && user.role === 'photographer' ? (user.photographerName || user.studioName || null) : null,
+    photographer_instagram: user && user.role === 'photographer' ? (user.website || null) : null,
+    guest_name: user && user.role === 'guest' ? (user.photographerName || user.studioName || 'Guest User') : null,
+    guest_email: user && user.role === 'guest' ? (user.email || null) : null,
+    notes: [
+      item.printOnCover ? 'Print on cover: yes' : null,
+      item.pictureWindow ? 'Picture window: yes' : null
+    ].filter(Boolean).join(' | ') || null
+  };
+  const { data, error } = await client.from('drafts').insert([payload]).select().limit(1);
+  if(error) return { error };
+  return { data: data && data[0] ? data[0] : null };
+}
+
 
 function storageAvailable(){
   try{
@@ -637,36 +685,23 @@ function setupNewOrder(){
       created:new Date().toISOString().slice(0,10),
       price: roundMoney(pricingResult.value || 0)
     };
-    try {
-  const { error } = await supabaseClient.from('drafts').insert([{
-    draft_name: item.title,
-    status: item.status.toLowerCase(),
-    album_type: item.selectionType,
-    album_size: item.size,
-    cover_material: item.coverMaterial,
-    cover_color: item.cover,
-    spreads: item.spreads,
-    total_price: item.price,
-    photographer_name: user.photographerName || null,
-    photographer_instagram: user.website || null,
-    guest_email: user.email || null
-  }]);
-
-  if (error) {
-    console.error("Supabase error:", error);
-  }
-} catch (err) {
-  console.error("Supabase connection failed:", err);
-}
+    const remoteResult = await saveDraftToSupabase(item, user);
+    if(remoteResult && remoteResult.data && remoteResult.data.id){
+      item.remoteId = remoteResult.data.id;
+    }
+    if(remoteResult && remoteResult.error){
+      console.error('Supabase draft save error:', remoteResult.error);
+    }
     projects.unshift(item);
     if(!saveProjects(projects)){
       showMessage('orderMsg','Unable to save the project in browser storage. Please allow local storage and try again.', true);
       return;
     }
     localStorage.setItem('am_current_project_id', item.id);
-    showMessage('orderMsg', user.role==='guest'
+    const saveMsg = user.role==='guest'
       ? 'Preview saved. Opening the preview editor now.'
-      : (action === 'place-order' ? 'Order placed. Opening your orders page now.' : 'Project saved. Opening your orders page now.'), false);
+      : (action === 'place-order' ? 'Order placed. Opening your orders page now.' : 'Project saved. Opening your orders page now.');
+    showMessage('orderMsg', remoteResult && remoteResult.error ? saveMsg + ' Database sync failed, but the local save is safe.' : saveMsg, !!(remoteResult && remoteResult.error));
     location.href = user.role==='guest' ? 'guest-draft-edit.html' : 'orders.html';
   });
 }
