@@ -130,9 +130,8 @@ function setupRegister(){
     data.role='photographer';
     users.push(data);
     saveUsers(users);
-    setCurrentUser(data);
-    showMessage('registerMsg','Registration saved locally. In the real site, approval can unlock photographer pricing.', false);
-    setTimeout(()=>location.href='dashboard.html', 500);
+    showMessage('registerMsg','Account created successfully. Your account is pending approval.', false);
+    form.reset();
   });
 }
 function setupLogin(){
@@ -152,6 +151,10 @@ function setupLogin(){
     const user=readUsers().find(u=>u.email.toLowerCase()===email && u.password===password);
     if(!user){
       showMessage('loginMsg','Email or password not found. Use the demo account button to test the photographer area.', true); return;
+    }
+    if(user && user.approved === false){
+      showMessage('loginMsg','Your account is pending approval.', true);
+      return;
     }
     setCurrentUser(user);
     location.href='dashboard.html';
@@ -538,8 +541,71 @@ function setupCoverModal(){
   }
 }
 
+
+function renderPendingApprovals(currentUser){
+  if(!currentUser || currentUser.email !== 'demo@alvezmango.com') return;
+
+  const panel = document.getElementById('approvalPanel');
+  const listEl = document.getElementById('approvalList');
+
+  const users = readUsers();
+  const pending = users.filter(u => u.role === 'photographer' && !u.approved);
+
+  if(!pending.length){
+    panel.style.display = 'none';
+    return;
+  }
+
+  panel.style.display = 'block';
+
+  listEl.innerHTML = pending.map(u => `
+    <div class="panel" style="margin-bottom:12px">
+      <strong>${u.photographerName}</strong> (${u.email})<br>
+      <span class="small">${u.phone} · ${u.city} · ${u.country}</span><br>
+      <span class="small">${u.website}</span><br><br>
+
+      <button onclick="approveUser('${u.email}')" class="btn">Approve</button>
+      <button onclick="deleteUser('${u.email}')" class="btn secondary">Delete</button>
+    </div>
+  `).join('');
+}
+
+function approveUser(email){
+  let users = readUsers();
+  users = users.map(u => {
+    if(u.email === email){
+      u.approved = true;
+    }
+    return u;
+  });
+  saveUsers(users);
+  location.reload();
+}
+
+function deleteUser(email){
+  if(!confirm('Delete this account?')) return;
+  let users = readUsers().filter(u => u.email !== email);
+  saveUsers(users);
+  location.reload();
+}
+
+function forgotPassword(){
+  const email = prompt("Enter your email:");
+  if(!email) return;
+
+  const user = readUsers().find(u => u.email === email);
+
+  if(!user){
+    alert("No account found.");
+    return;
+  }
+
+  alert("Password reset is a mockup. Your password is: " + user.password);
+}
+
 function setupDashboard(){
   const user=ensureAuth(); if(!user) return;
+  renderPendingApprovals(user);
   const list=readProjects().filter(p => p.userEmail===user.email).sort((a,b)=>String(b.created||'').localeCompare(String(a.created||'')) || String(b.id||'').localeCompare(String(a.id||'')));
   renderPendingApprovals(user);
   const body=document.getElementById('projectRows');
@@ -596,6 +662,7 @@ function deleteDraft(id){
 }
 function setupOrders(){
   const user=ensureAuth(); if(!user) return;
+  renderPendingApprovals(user);
   const list=readProjects().filter(p => p.userEmail===user.email).sort((a,b)=>String(b.created||'').localeCompare(String(a.created||'')) || String(b.id||'').localeCompare(String(a.id||'')));
   const wrap=document.getElementById('ordersList');
   if(!wrap) return;
