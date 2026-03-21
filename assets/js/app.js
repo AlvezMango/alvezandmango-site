@@ -637,6 +637,27 @@ function setupNewOrder(){
       created:new Date().toISOString().slice(0,10),
       price: roundMoney(pricingResult.value || 0)
     };
+    try {
+  const { error } = await supabaseClient.from('drafts').insert([{
+    draft_name: item.title,
+    status: item.status.toLowerCase(),
+    album_type: item.selectionType,
+    album_size: item.size,
+    cover_material: item.coverMaterial,
+    cover_color: item.cover,
+    spreads: item.spreads,
+    total_price: item.price,
+    photographer_name: user.photographerName || null,
+    photographer_instagram: user.website || null,
+    guest_email: user.email || null
+  }]);
+
+  if (error) {
+    console.error("Supabase error:", error);
+  }
+} catch (err) {
+  console.error("Supabase connection failed:", err);
+}
     projects.unshift(item);
     if(!saveProjects(projects)){
       showMessage('orderMsg','Unable to save the project in browser storage. Please allow local storage and try again.', true);
