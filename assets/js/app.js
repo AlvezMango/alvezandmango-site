@@ -72,6 +72,43 @@ function saveUsers(users){ try{ localStorage.setItem('am_users', JSON.stringify(
 function currentUser(){ return safeJsonParse(localStorage.getItem('am_current_user') || 'null', null); }
 function setCurrentUser(user){ try{ localStorage.setItem('am_current_user', JSON.stringify(user)); return true; }catch(e){ console.error('Unable to save current user', e); return false; } }
 function signOut(){ localStorage.removeItem('am_current_user'); location.href='login.html'; }
+
+const ADMIN_EMAILS = ['demo@alvezmango.com'];
+function isAdminUser(user){
+  if(!user) return false;
+  return user.role === 'admin' || ADMIN_EMAILS.includes(String(user.email || '').toLowerCase());
+}
+function getProjectOwnerLabel(project){
+  return project.ownerStudioName || project.ownerPhotographerName || project.userEmail || 'Unknown';
+}
+function getVisibleProjectsForUser(user){
+  const projects = readProjects();
+  if(isAdminUser(user)) return projects.slice();
+  return projects.filter(p => p.userEmail === user.email);
+}
+function getVisibleProjectById(user, id){
+  return getVisibleProjectsForUser(user).find(p => p.id === id) || null;
+}
+function countPendingApprovals(){
+  return readUsers().filter(u => u.role === 'photographer' && !u.approved).length;
+}
+function updateAdminNav(user){
+  if(!user) return;
+  document.querySelectorAll('[data-admin-only]').forEach(el => {
+    el.style.display = isAdminUser(user) ? '' : 'none';
+  });
+  document.querySelectorAll('[data-admin-label]').forEach(el => {
+    el.textContent = isAdminUser(user) ? 'Admin' : 'Dashboard';
+  });
+}
+function escapeHtml(value){
+  return String(value == null ? '' : value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
 function readProjects(){ return safeJsonParse(localStorage.getItem('am_projects') || '[]', []); }
 function saveProjects(projects){ try{ localStorage.setItem('am_projects', JSON.stringify(projects)); return true; }catch(e){ console.error('Unable to save projects', e); return false; } }
 function uuid(){ return 'AM-' + Math.floor(Date.now()/1000).toString().slice(-6); }
@@ -543,29 +580,37 @@ function setupCoverModal(){
 
 
 function renderPendingApprovals(currentUser){
-  if(!currentUser || currentUser.email !== 'demo@alvezmango.com') return;
-
   const panel = document.getElementById('approvalPanel');
   const listEl = document.getElementById('approvalList');
-
-  const users = readUsers();
-  const pending = users.filter(u => u.role === 'photographer' && !u.approved);
-
-  if(!pending.length){
+  if(!panel || !listEl) return;
+  if(!isAdminUser(currentUser)){
     panel.style.display = 'none';
     return;
   }
 
+  const pending = readUsers().filter(u => u.role === 'photographer' && !u.approved);
+  if(!pending.length){
+    panel.style.display = 'block';
+    listEl.innerHTML = '<div class="empty">No pending photographer approvals right now.</div>';
+    return;
+  }
+
   panel.style.display = 'block';
-
   listEl.innerHTML = pending.map(u => `
-    <div class="panel" style="margin-bottom:12px">
-      <strong>${u.photographerName}</strong> (${u.email})<br>
-      <span class="small">${u.phone} · ${u.city} · ${u.country}</span><br>
-      <span class="small">${u.website}</span><br><br>
-
-      <button onclick="approveUser('${u.email}')" class="btn">Approve</button>
-      <button onclick="deleteUser('${u.email}')" class="btn secondary">Delete</button>
+    <div class="panel" style="margin-bottom:12px;border:1px solid #e6ddd2">
+      <div style="display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;align-items:flex-start">
+        <div>
+          <strong>${escapeHtml(u.photographerName || u.studioName || 'Photographer')}</strong>
+          <div class="small" style="margin-top:4px">${escapeHtml(u.studioName || 'Studio not provided')}</div>
+          <div class="small" style="margin-top:4px">${escapeHtml(u.email || '—')}</div>
+          <div class="small" style="margin-top:4px">${escapeHtml([u.phone, u.city, u.country].filter(Boolean).join(' · ') || '—')}</div>
+          <div class="small" style="margin-top:4px">${escapeHtml(u.website || 'No website provided')}</div>
+        </div>
+        <div class="action-row">
+          <button onclick="approveUser('${escapeHtml(u.email || '')}')" class="btn">Approve</button>
+          <button onclick="deleteUser('${escapeHtml(u.email || '')}')" class="btn secondary">Delete</button>
+        </div>
+      </div>
     </div>
   `).join('');
 }
@@ -605,26 +650,42 @@ function forgotPassword(){
 
 function setupDashboard(){
   const user=ensureAuth(); if(!user) return;
+  updateAdminNav(user);
   renderPendingApprovals(user);
-  const list=readProjects().filter(p => p.userEmail===user.email).sort((a,b)=>String(b.created||'').localeCompare(String(a.created||'')) || String(b.id||'').localeCompare(String(a.id||'')));
-  renderPendingApprovals(user);
+  const list=getVisibleProjectsForUser(user).sort((a,b)=>String(b.created||'').localeCompare(String(a.created||'')) || String(b.id||'').localeCompare(String(a.id||'')));
   const body=document.getElementById('projectRows');
+  const adminMode = isAdminUser(user);
+  const heading = document.getElementById('dashboardHeading');
+  const note = document.getElementById('dashboardNote');
+  if(heading) heading.textContent = adminMode ? 'Central admin dashboard' : 'Studio dashboard for ';
+  if(note) note.textContent = adminMode
+    ? 'Admin mode shows all photographer orders, pending approvals, and the latest activity across the system.'
+    : 'Photographer notifications: shared client drafts can be opened and converted into active projects.';
   if(document.getElementById('projectCount')) document.getElementById('projectCount').textContent=list.length;
-  if(document.getElementById('draftCount')) document.getElementById('draftCount').textContent=list.filter(p=>p.status==='Draft').length;
-  if(document.getElementById('reviewCount')) document.getElementById('reviewCount').textContent=list.filter(p=>p.status!=='Draft').length;
+  if(document.getElementById('draftCount')) document.getElementById('draftCount').textContent=adminMode ? countPendingApprovals() : list.filter(p=>p.status==='Draft').length;
+  if(document.getElementById('reviewCount')) document.getElementById('reviewCount').textContent=adminMode ? list.filter(p=>p.status==='In review').length : list.filter(p=>p.status!=='Draft').length;
+  const draftLabel = document.getElementById('draftCountLabel');
+  const reviewLabel = document.getElementById('reviewCountLabel');
+  if(draftLabel) draftLabel.textContent = adminMode ? 'Pending approvals' : 'Drafts';
+  if(reviewLabel) reviewLabel.textContent = adminMode ? 'In review' : 'In review / active';
+  const recentTitle = document.getElementById('recentProjectsTitle');
+  if(recentTitle) recentTitle.textContent = adminMode ? 'Latest system orders' : 'Your albums';
+  const ownerHead = document.getElementById('ownerColumnHead');
+  if(ownerHead) ownerHead.style.display = adminMode ? '' : 'none';
   if(body){
     if(!list.length){
-      body.innerHTML='<tr><td colspan="8"><div class="empty">No projects yet. Create your first album order.</div></td></tr>';
+      body.innerHTML='<tr><td colspan="9"><div class="empty">No projects yet.</div></td></tr>';
     }else{
-      body.innerHTML=list.map(p=>`
+      body.innerHTML=list.slice(0, 12).map(p=>`
       <tr>
-        <td><a href="#" class="linkish" onclick="openDraft('${p.id}');return false;">${p.id}</a></td>
-        <td><a href="#" class="linkish" onclick="openDraft('${p.id}');return false;">${p.title}</a></td>
-        <td>${p.selectionType || p.albumType}</td>
-        <td>${p.size}</td>
-        <td>${p.cover}</td>
-        <td><span class="chip">${p.status}</span></td>
-        <td>${p.created}</td>
+        <td><a href="#" class="linkish" onclick="openDraft('${p.id}');return false;">${escapeHtml(p.id)}</a></td>
+        <td><a href="#" class="linkish" onclick="openDraft('${p.id}');return false;">${escapeHtml(p.title || 'Untitled Project')}</a></td>
+        <td style="display:${adminMode ? '' : 'none'}">${escapeHtml(getProjectOwnerLabel(p))}</td>
+        <td>${escapeHtml(p.selectionType || p.albumType || 'Album')}</td>
+        <td>${escapeHtml(p.size || '—')}</td>
+        <td>${escapeHtml(p.cover || '—')}</td>
+        <td><span class="chip">${escapeHtml(p.status || 'Draft')}</span></td>
+        <td>${escapeHtml(p.created || '—')}</td>
         <td>
           <div class="action-row">
             <button onclick="openDraft('${p.id}')" class="btn secondary" style="padding:8px 12px">View</button>
@@ -656,34 +717,72 @@ function deleteDraft(id){
   if(!confirm('Delete this draft project?')) return;
   const user=currentUser();
   let projects=readProjects();
-  projects=projects.filter(p => !(p.id===id && p.userEmail===user.email && p.status==='Draft'));
+  projects=projects.filter(p => {
+    if(p.id !== id || p.status !== 'Draft') return true;
+    if(isAdminUser(user)) return false;
+    return p.userEmail !== user.email;
+  });
   saveProjects(projects);
   window.location.reload();
 }
 function setupOrders(){
   const user=ensureAuth(); if(!user) return;
+  updateAdminNav(user);
   renderPendingApprovals(user);
-  const list=readProjects().filter(p => p.userEmail===user.email).sort((a,b)=>String(b.created||'').localeCompare(String(a.created||'')) || String(b.id||'').localeCompare(String(a.id||'')));
+  const adminMode = isAdminUser(user);
+  const list=getVisibleProjectsForUser(user).sort((a,b)=>String(b.created||'').localeCompare(String(a.created||'')) || String(b.id||'').localeCompare(String(a.id||'')));
   const wrap=document.getElementById('ordersList');
+  const heading=document.getElementById('ordersHeading');
+  const note=document.getElementById('ordersNote');
+  const toolbar=document.getElementById('ordersToolbar');
+  if(heading) heading.textContent = adminMode ? 'All system orders' : 'All projects for ';
+  if(note) note.textContent = adminMode
+    ? 'Admin mode centralizes every photographer order in one place. Filter by status and inspect any project.'
+    : 'Orders page now supports the photographer workflow: open a shared client draft, modify it, upload spreads, and review pricing.';
+  if(toolbar) toolbar.style.display = adminMode ? 'flex' : 'none';
   if(!wrap) return;
   if(!list.length){ wrap.innerHTML='<div class="empty">No orders found yet.</div>'; return; }
-  wrap.innerHTML=list.map(p=>`
-    <div class="panel" style="margin-bottom:16px">
-      <div style="display:flex;justify-content:space-between;gap:18px;flex-wrap:wrap">
-        <div>
-          <div class="kicker">${p.id}</div>
-          <h3 style="margin:6px 0 6px"><a href="#" class="linkish" onclick="openDraft('${p.id}');return false;">${p.title}</a></h3>
-          <div class="small">${p.selectionType || p.albumType} · ${p.size} · ${p.cover} · ${p.spreads} spreads${p.sharedByGuest ? ' · Shared by guest' : ''}</div>
-          <div class="small" style="margin-top:4px">${user.role === 'guest' ? 'Quote available through your photographer' : 'Estimate: €' + Number(p.price || 0).toFixed(2)}</div>
-        </div>
-        <div style="display:flex; gap:10px; align-items:start; flex-wrap:wrap">
-          <span class="chip">${p.status}</span>
-          <button onclick="openDraft('${p.id}')" class="btn secondary" style="padding:9px 12px">View draft</button>
-          ${p.status==='Draft' ? `<button onclick="deleteDraft('${p.id}')" class="btn secondary" style="padding:9px 12px">Delete draft</button>` : ''}
+
+  const renderList = (statusFilter='all', search='') => {
+    const normalizedSearch = String(search || '').trim().toLowerCase();
+    const filtered = list.filter(p => {
+      const matchesStatus = statusFilter === 'all' ? true : String(p.status || '').toLowerCase() === statusFilter;
+      const hay = [p.id, p.title, p.userEmail, p.ownerStudioName, p.ownerPhotographerName, p.cover, p.size].join(' ').toLowerCase();
+      const matchesSearch = !normalizedSearch || hay.includes(normalizedSearch);
+      return matchesStatus && matchesSearch;
+    });
+    if(!filtered.length){
+      wrap.innerHTML='<div class="empty">No orders match the current filter.</div>';
+      return;
+    }
+    wrap.innerHTML=filtered.map(p=>`
+      <div class="panel" style="margin-bottom:16px">
+        <div style="display:flex;justify-content:space-between;gap:18px;flex-wrap:wrap">
+          <div>
+            <div class="kicker">${escapeHtml(p.id || '—')}</div>
+            <h3 style="margin:6px 0 6px"><a href="#" class="linkish" onclick="openDraft('${p.id}');return false;">${escapeHtml(p.title || 'Untitled Project')}</a></h3>
+            <div class="small">${escapeHtml(p.selectionType || p.albumType || 'Album')} · ${escapeHtml(p.size || '—')} · ${escapeHtml(p.cover || '—')} · ${escapeHtml(String(p.spreads || '—'))} spreads${p.sharedByGuest ? ' · Shared by guest' : ''}</div>
+            ${adminMode ? `<div class="small" style="margin-top:4px">Owner: ${escapeHtml(getProjectOwnerLabel(p))} · ${escapeHtml(p.userEmail || '—')}</div>` : ''}
+            <div class="small" style="margin-top:4px">${user.role === 'guest' ? 'Quote available through your photographer' : 'Estimate: €' + Number(p.price || 0).toFixed(2)}</div>
+          </div>
+          <div style="display:flex; gap:10px; align-items:start; flex-wrap:wrap">
+            <span class="chip">${escapeHtml(p.status || 'Draft')}</span>
+            <button onclick="openDraft('${p.id}')" class="btn secondary" style="padding:9px 12px">View draft</button>
+            ${p.status==='Draft' ? `<button onclick="deleteDraft('${p.id}')" class="btn secondary" style="padding:9px 12px">Delete draft</button>` : ''}
+          </div>
         </div>
       </div>
-    </div>
-  `).join('');
+    `).join('');
+  };
+
+  renderList();
+  if(toolbar){
+    const statusInput = document.getElementById('adminStatusFilter');
+    const searchInput = document.getElementById('adminOrderSearch');
+    const rerender = () => renderList(statusInput ? statusInput.value : 'all', searchInput ? searchInput.value : '');
+    if(statusInput) statusInput.onchange = rerender;
+    if(searchInput) searchInput.oninput = rerender;
+  }
 }
 function setupNewOrder(){
   const user=ensureAuth(); if(!user) return;
@@ -737,6 +836,8 @@ function setupNewOrder(){
     const item={
       id:uuid(),
       userEmail:user.email,
+      ownerStudioName:user.studioName || '',
+      ownerPhotographerName:user.photographerName || '',
       title:fd.get('projectTitle'),
       albumType:'Album',
       selectionType:fd.get('selectionType') || 'Album',
@@ -809,7 +910,7 @@ document.addEventListener('DOMContentLoaded', initPage);
 function setupDraftDetail(){
   const user = ensureAuth(); if(!user) return;
   const id = localStorage.getItem('am_current_project_id');
-  const project = getProjectById(id);
+  const project = getVisibleProjectById(user, id);
   const wrap = document.getElementById('draftDetailWrap');
   const noData = document.getElementById('draftDetailEmpty');
   if(!project){
@@ -862,6 +963,8 @@ function convertGuestDraft(targetEmail){
   const copy = {...project};
   copy.id = uuid();
   copy.userEmail = (targetEmail || '').trim().toLowerCase() || 'demo@alvezmango.com';
+  copy.ownerStudioName = copy.ownerStudioName || 'Shared guest draft';
+  copy.ownerPhotographerName = copy.ownerPhotographerName || 'Guest share';
   copy.status = 'Draft';
   copy.created = new Date().toISOString().slice(0,10);
   const quote = calcQuote(copy.size, Number(copy.spreads || 20), copy.selectionType || 'Album', Number(copy.quantity || 1), Number(copy.replicaQty || 2), copy.replicaSize || defaultReplicaSize(copy.size), !!copy.printOnCover, !!copy.pictureWindow, 'photographer');
@@ -877,7 +980,7 @@ function convertGuestDraft(targetEmail){
 function setupPhotographerDraftEditor(){
   const user = ensureAuth(); if(!user) return;
   const id = localStorage.getItem('am_current_project_id');
-  const project = getProjectById(id);
+  const project = getVisibleProjectById(user, id);
   const form = document.getElementById('photographerDraftForm');
   const empty = document.getElementById('photographerDraftEmpty');
   const wrap = document.getElementById('photographerDraftWrap');
@@ -1020,7 +1123,7 @@ function renderAlbumPreview(targetId, coverName, material, size){
 function setupGuestDraftEditor(){
   const user = ensureAuth(); if(!user) return;
   const id = localStorage.getItem('am_current_project_id');
-  const project = getProjectById(id);
+  const project = getVisibleProjectById(user, id);
   const form = document.getElementById('guestDraftForm');
   const empty = document.getElementById('guestDraftEmpty');
   const wrap = document.getElementById('guestDraftWrap');

@@ -33,9 +33,29 @@
 <section class="section">
   <div class="container"><div id="storageWarning"></div></div>
   <div class="container">
-    <div class="note-strip" style="margin-bottom:18px">Orders page now supports the photographer workflow: open a shared client draft, modify it, upload spreads, and review pricing.</div><div class="section-head">
-      <div><div class="kicker">Orders</div><h2>All projects for <span data-studio-name></span></h2></div>
+    <div class="note-strip" id="ordersNote" style="margin-bottom:18px">Orders page now supports the photographer workflow: open a shared client draft, modify it, upload spreads, and review pricing.</div><div class="section-head">
+      <div><div class="kicker">Orders</div><h2><span id="ordersHeading">All projects for </span><span data-studio-name></span></h2></div>
       <div class="hero-actions"><a class="btn" href="new-order.html">New order</a><a class="btn secondary" href="dashboard.html">Dashboard</a></div>
+    </div>
+
+    <div id="ordersToolbar" class="panel" style="display:none;margin:18px 0">
+      <div class="form-grid">
+        <div class="field">
+          <label>Status</label>
+          <select id="adminStatusFilter">
+            <option value="all">All statuses</option>
+            <option value="draft">Draft</option>
+            <option value="in review">In review</option>
+            <option value="approved">Approved</option>
+            <option value="in production">In production</option>
+            <option value="shipped">Shipped</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Search</label>
+          <input id="adminOrderSearch" type="text" placeholder="Search by project, owner, email, cover, ID">
+        </div>
+      </div>
     </div>
     <div id="ordersList"></div>
   </div>

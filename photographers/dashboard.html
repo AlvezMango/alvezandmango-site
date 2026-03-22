@@ -32,13 +32,13 @@
   <div class="container"><div id="storageWarning"></div></div>
   <div class="container">
     <div class="section-head">
-      <div><div class="kicker">Welcome back</div><h2>Studio dashboard for <span data-studio-name></span></h2></div>
+      <div><div class="kicker">Welcome back</div><h2><span id="dashboardHeading">Studio dashboard for </span><span data-studio-name></span></h2></div>
       <div class="hero-actions"><a class="btn" href="new-order.html">Create new album order</a><a class="btn secondary" href="orders.html">View all orders</a></div>
     </div>
-    <div class="note-strip" style="margin-bottom:18px">Photographer notifications: shared client drafts can be opened and converted into active projects.</div><div class="stat-row">
+    <div class="note-strip" id="dashboardNote" style="margin-bottom:18px">Photographer notifications: shared client drafts can be opened and converted into active projects.</div><div class="stat-row">
       <div class="stat"><strong id="projectCount">0</strong><span class="small">Total projects</span></div>
-      <div class="stat"><strong id="draftCount">0</strong><span class="small">Drafts</span></div>
-      <div class="stat"><strong id="reviewCount">0</strong><span class="small">In review / active</span></div>
+      <div class="stat"><strong id="draftCount">0</strong><span class="small" id="draftCountLabel">Drafts</span></div>
+      <div class="stat"><strong id="reviewCount">0</strong><span class="small" id="reviewCountLabel">In review / active</span></div>
     </div>
   </div>
   <div class="container" id="approvalPanel" style="display:none;margin-top:18px">
@@ -59,10 +59,10 @@
     </aside>
     <main class="panel">
       <div class="kicker">Recent projects</div>
-      <h3 style="font-size:30px;font-family:Georgia,serif;margin:8px 0 18px">Your albums</h3>
+      <h3 id="recentProjectsTitle" style="font-size:30px;font-family:Georgia,serif;margin:8px 0 18px">Your albums</h3>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>ID</th><th>Project</th><th>Album</th><th>Size</th><th>Cover</th><th>Status</th><th>Created</th><th>Action</th></tr></thead>
+          <thead><tr><th>ID</th><th>Project</th><th id="ownerColumnHead" style="display:none">Owner</th><th>Album</th><th>Size</th><th>Cover</th><th>Status</th><th>Created</th><th>Action</th></tr></thead>
           <tbody id="projectRows"></tbody>
         </table>
       </div>
