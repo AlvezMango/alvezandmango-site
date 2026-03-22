@@ -1,9 +1,11 @@
 
 function getSupabaseClient(){
   if(window.supabaseClient) return window.supabaseClient;
-  if(window.supabase && window.SUPABASE_URL && window.SUPABASE_KEY){
+  const url = window.SUPABASE_URL || window.supabaseUrl || null;
+  const key = window.SUPABASE_ANON_KEY || window.SUPABASE_KEY || window.supabaseKey || null;
+  if(window.supabase && url && key){
     try{
-      window.supabaseClient = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_KEY);
+      window.supabaseClient = window.supabase.createClient(url, key);
       return window.supabaseClient;
     }catch(e){
       console.error('Unable to initialise Supabase client', e);
@@ -11,6 +13,47 @@ function getSupabaseClient(){
     }
   }
   return null;
+}
+
+async function signOutSupabase(){
+  const client = getSupabaseClient();
+  if(client && client.auth){
+    try{ await client.auth.signOut(); }catch(e){ console.warn('Supabase sign out failed', e); }
+  }
+}
+
+async function fetchPhotographerProfileByEmail(email){
+  const client = getSupabaseClient();
+  if(!client || !email) return { data:null, error:new Error('Supabase unavailable') };
+  return await client.from('photographers').select('*').ilike('email', email).limit(1).maybeSingle();
+}
+
+async function fetchPendingPhotographers(){
+  const client = getSupabaseClient();
+  if(!client) return { data:[], error:new Error('Supabase unavailable') };
+  return await client.from('photographers').select('*').eq('status', 'pending').order('created_at', { ascending:true });
+}
+
+async function updatePhotographerStatus(email, status){
+  const client = getSupabaseClient();
+  if(!client) return { error:new Error('Supabase unavailable') };
+  return await client.from('photographers').update({ status }).ilike('email', email).select();
+}
+
+async function deletePhotographerRow(email){
+  const client = getSupabaseClient();
+  if(!client) return { error:new Error('Supabase unavailable') };
+  return await client.from('photographers').delete().ilike('email', email).select();
+}
+
+async function fetchOrdersForUser(user){
+  const client = getSupabaseClient();
+  if(!client) return { data:null, error:new Error('Supabase unavailable') };
+  let query = client.from('orders').select('*').order('created_at', { ascending:false });
+  if(!(user && user.role === 'admin')){
+    query = query.ilike('photographer_name', user.photographerName || user.name || '');
+  }
+  return await query;
 }
 
 async function saveDraftToSupabase(item, user){
@@ -71,15 +114,10 @@ function readUsers(){ return safeJsonParse(localStorage.getItem('am_users') || '
 function saveUsers(users){ try{ localStorage.setItem('am_users', JSON.stringify(users)); return true; }catch(e){ console.error('Unable to save users', e); return false; } }
 function currentUser(){ return safeJsonParse(localStorage.getItem('am_current_user') || 'null', null); }
 function setCurrentUser(user){ try{ localStorage.setItem('am_current_user', JSON.stringify(user)); return true; }catch(e){ console.error('Unable to save current user', e); return false; } }
-function signOut(){ localStorage.removeItem('am_current_user'); location.href='login.html'; }
+async function signOut(){ localStorage.removeItem('am_current_user'); await signOutSupabase(); location.href='login.html'; }
 function readProjects(){ return safeJsonParse(localStorage.getItem('am_projects') || '[]', []); }
 function saveProjects(projects){ try{ localStorage.setItem('am_projects', JSON.stringify(projects)); return true; }catch(e){ console.error('Unable to save projects', e); return false; } }
 function uuid(){ return 'AM-' + Math.floor(Date.now()/1000).toString().slice(-6); }
-
-const ADMIN_EMAILS = ['admin@alvezmango.com','demo@alvezmango.com'];
-function isAdminUser(user){
-  return !!(user && (user.role === 'admin' || ADMIN_EMAILS.includes(String(user.email||'').toLowerCase())));
-}
 
 function seedDemoData(){
   if(!storageAvailable()) return;
@@ -139,34 +177,58 @@ function setupRegister(){
     form.reset();
   });
 }
-function setupLogin(){
+async function setupLogin(){
   const form=document.getElementById('loginForm');
   if(!form) return;
   const fillDemo=document.getElementById('fillDemo');
   if(fillDemo){
     fillDemo.addEventListener('click', function(){
-      document.getElementById('loginEmail').value='demo@alvezmango.com';
-      document.getElementById('loginPassword').value='demo123';
+      document.getElementById('loginEmail').value='admin@alvezandmango.com';
+      document.getElementById('loginPassword').value='';
     });
   }
-  form.addEventListener('submit', function(e){
+  form.addEventListener('submit', async function(e){
     e.preventDefault();
     const email=document.getElementById('loginEmail').value.trim().toLowerCase();
     const password=document.getElementById('loginPassword').value;
-    const user=readUsers().find(u=>u.email.toLowerCase()===email && u.password===password);
-    if(!user){
-      showMessage('loginMsg','Email or password not found. Use the demo account button to test the photographer area.', true); return;
+    const client = getSupabaseClient();
+    if(!client){
+      showMessage('loginMsg','Supabase is not available on this page.', true); return;
     }
-    if(user && user.approved === false){
-      showMessage('loginMsg','Your account is pending approval.', true);
-      return;
+    const { data: authData, error: authError } = await client.auth.signInWithPassword({ email, password });
+    if(authError || !authData || !authData.user){
+      showMessage('loginMsg','Wrong email or password.', true); return;
     }
+    const { data: profile, error: profileError } = await fetchPhotographerProfileByEmail(email);
+    if(profileError){
+      await client.auth.signOut();
+      showMessage('loginMsg','Could not load your photographer profile.', true); return;
+    }
+    if(!profile){
+      await client.auth.signOut();
+      showMessage('loginMsg','Your login works, but no photographer profile was found for this email.', true); return;
+    }
+    if(String(profile.status || '').toLowerCase() !== 'approved'){
+      await client.auth.signOut();
+      showMessage('loginMsg','Your account is pending approval.', true); return;
+    }
+    const user = {
+      id: authData.user.id,
+      email: email,
+      role: email === 'admin@alvezandmango.com' ? 'admin' : 'photographer',
+      approved: true,
+      photographerName: profile.name || 'Photographer',
+      studioName: profile.company_name || profile.name || 'Studio',
+      phone: profile.phone || '',
+      country: profile.country || '',
+      city: profile.city || '',
+      website: profile.website || profile.instagram || '',
+      instagram: profile.instagram || ''
+    };
     setCurrentUser(user);
     location.href='dashboard.html';
   });
 }
-
-
 
 function albumPricingConfig(){
   return {
@@ -547,27 +609,34 @@ function setupCoverModal(){
 }
 
 
-function renderPendingApprovals(currentUser){
-  if(!isAdminUser(currentUser)) return;
+async function renderPendingApprovals(currentUser){
+  if(!currentUser || currentUser.role !== 'admin') return;
 
   const panel = document.getElementById('approvalPanel');
   const listEl = document.getElementById('approvalList');
+  const msgEl = document.getElementById('approvalMsg');
+  if(!panel || !listEl) return;
 
-  const users = readUsers();
-  const pending = users.filter(u => u.role === 'photographer' && !u.approved);
-
+  const { data, error } = await fetchPendingPhotographers();
+  if(error){
+    panel.style.display = 'block';
+    if(msgEl) showMessage('approvalMsg', 'Could not load pending photographers from Supabase.', true);
+    listEl.innerHTML = '<div class="empty">No pending photographers loaded.</div>';
+    return;
+  }
+  const pending = data || [];
   if(!pending.length){
     panel.style.display = 'none';
     return;
   }
 
   panel.style.display = 'block';
-
+  if(msgEl) msgEl.innerHTML = '';
   listEl.innerHTML = pending.map(u => `
     <div class="panel" style="margin-bottom:12px">
-      <strong>${u.photographerName}</strong> (${u.email})<br>
-      <span class="small">${u.phone} · ${u.city} · ${u.country}</span><br>
-      <span class="small">${u.website}</span><br><br>
+      <strong>${u.name || 'Unnamed photographer'}</strong> (${u.email || ''})<br>
+      <span class="small">${u.phone || ''} · ${u.city || ''} · ${u.country || ''}</span><br>
+      <span class="small">${u.website || u.instagram || ''}</span><br><br>
 
       <button onclick="approveUser('${u.email}')" class="btn">Approve</button>
       <button onclick="deleteUser('${u.email}')" class="btn secondary">Delete</button>
@@ -575,46 +644,81 @@ function renderPendingApprovals(currentUser){
   `).join('');
 }
 
-function approveUser(email){
-  let users = readUsers();
-  users = users.map(u => {
-    if(u.email === email){
-      u.approved = true;
-    }
-    return u;
-  });
-  saveUsers(users);
-  location.reload();
-}
-
-function deleteUser(email){
-  if(!confirm('Delete this account?')) return;
-  let users = readUsers().filter(u => u.email !== email);
-  saveUsers(users);
-  location.reload();
-}
-
-function forgotPassword(){
-  const email = prompt("Enter your email:");
-  if(!email) return;
-
-  const user = readUsers().find(u => u.email === email);
-
-  if(!user){
-    alert("No account found.");
+async function approveUser(email){
+  const result = await updatePhotographerStatus(email, 'approved');
+  if(result.error){
+    showMessage('approvalMsg', 'Could not approve this photographer.', true);
     return;
   }
-
-  alert("Password reset is a mockup. Your password is: " + user.password);
+  showMessage('approvalMsg', 'Photographer approved.', false);
+  await renderPendingApprovals(currentUser());
 }
 
-function setupDashboard(){
+async function deleteUser(email){
+  if(!confirm('Delete this account?')) return;
+  const result = await deletePhotographerRow(email);
+  if(result.error){
+    showMessage('approvalMsg', 'Could not delete this photographer row.', true);
+    return;
+  }
+  showMessage('approvalMsg', 'Photographer row deleted.', false);
+  await renderPendingApprovals(currentUser());
+}
+
+async function forgotPassword(){
+  const email = prompt('Enter your email:');
+  if(!email) return;
+  const client = getSupabaseClient();
+  if(!client){
+    alert('Supabase is not available on this page.');
+    return;
+  }
+  const { error } = await client.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin });
+  if(error){
+    alert('Could not send reset email.');
+    return;
+  }
+  alert('Password reset email sent.');
+}
+
+async function setupDashboard(){
   const user=ensureAuth(); if(!user) return;
-  renderPendingApprovals(user);
-  const list=(isAdminUser(user) ? readProjects() : readProjects().filter(p => p.userEmail===user.email))
-    .sort((a,b)=>String(b.created||'').localeCompare(String(a.created||'')) || String(b.id||'').localeCompare(String(a.id||'')));
-  renderPendingApprovals(user);
+  await renderPendingApprovals(user);
   const body=document.getElementById('projectRows');
+  if(user.role === 'admin'){
+    const { data, error } = await fetchOrdersForUser(user);
+    const list = error ? [] : (data || []).map(o => ({
+      id: o.order_number || o.id,
+      title: o.cover_text || 'Order',
+      selectionType: o.album_type || 'Album',
+      size: o.album_size || '',
+      cover: [o.cover_material, o.cover_color].filter(Boolean).join(' ') || '',
+      status: o.status || 'pending',
+      created: String(o.created_at || '').slice(0,10)
+    }));
+    if(document.getElementById('projectCount')) document.getElementById('projectCount').textContent=list.length;
+    if(document.getElementById('draftCount')) document.getElementById('draftCount').textContent='0';
+    if(document.getElementById('reviewCount')) document.getElementById('reviewCount').textContent=list.filter(p=>String(p.status).toLowerCase()!=='draft').length;
+    if(body){
+      if(!list.length){
+        body.innerHTML='<tr><td colspan="8"><div class="empty">No orders found in Supabase yet.</div></td></tr>';
+      }else{
+        body.innerHTML=list.map(p=>`
+        <tr>
+          <td>${p.id}</td>
+          <td>${p.title}</td>
+          <td>${p.selectionType}</td>
+          <td>${p.size}</td>
+          <td>${p.cover}</td>
+          <td><span class="chip">${p.status}</span></td>
+          <td>${p.created}</td>
+          <td><a class="btn secondary" href="orders.html" style="padding:8px 12px">Open orders</a></td>
+        </tr>`).join('');
+      }
+    }
+    return;
+  }
+  const list=readProjects().filter(p => p.userEmail===user.email).sort((a,b)=>String(b.created||'').localeCompare(String(a.created||'')) || String(b.id||'').localeCompare(String(a.id||'')));
   if(document.getElementById('projectCount')) document.getElementById('projectCount').textContent=list.length;
   if(document.getElementById('draftCount')) document.getElementById('draftCount').textContent=list.filter(p=>p.status==='Draft').length;
   if(document.getElementById('reviewCount')) document.getElementById('reviewCount').textContent=list.filter(p=>p.status!=='Draft').length;
@@ -625,7 +729,7 @@ function setupDashboard(){
       body.innerHTML=list.map(p=>`
       <tr>
         <td><a href="#" class="linkish" onclick="openDraft('${p.id}');return false;">${p.id}</a></td>
-        <td><a href="#" class="linkish" onclick="openDraft('${p.id}');return false;">${p.title}</a>${isAdminUser(user) ? `<div class="small">Owner: ${p.userEmail || '—'}</div>` : ''}</td>
+        <td><a href="#" class="linkish" onclick="openDraft('${p.id}');return false;">${p.title}</a></td>
         <td>${p.selectionType || p.albumType}</td>
         <td>${p.size}</td>
         <td>${p.cover}</td>
@@ -662,17 +766,38 @@ function deleteDraft(id){
   if(!confirm('Delete this draft project?')) return;
   const user=currentUser();
   let projects=readProjects();
-  projects=projects.filter(p => !(p.id===id && (isAdminUser(user) || p.userEmail===user.email) && p.status==='Draft'));
+  projects=projects.filter(p => !(p.id===id && p.userEmail===user.email && p.status==='Draft'));
   saveProjects(projects);
   window.location.reload();
 }
-function setupOrders(){
+async function setupOrders(){
   const user=ensureAuth(); if(!user) return;
-  renderPendingApprovals(user);
-  const list=(isAdminUser(user) ? readProjects() : readProjects().filter(p => p.userEmail===user.email))
-    .sort((a,b)=>String(b.created||'').localeCompare(String(a.created||'')) || String(b.id||'').localeCompare(String(a.id||'')));
+  await renderPendingApprovals(user);
   const wrap=document.getElementById('ordersList');
   if(!wrap) return;
+  if(user.role === 'admin'){
+    const { data, error } = await fetchOrdersForUser(user);
+    if(error){ wrap.innerHTML='<div class="empty">Could not load orders from Supabase.</div>'; return; }
+    const list = data || [];
+    if(!list.length){ wrap.innerHTML='<div class="empty">No orders found yet.</div>'; return; }
+    wrap.innerHTML=list.map(o=>`
+      <div class="panel" style="margin-bottom:16px">
+        <div style="display:flex;justify-content:space-between;gap:18px;flex-wrap:wrap">
+          <div>
+            <div class="kicker">${o.order_number || o.id}</div>
+            <h3 style="margin:6px 0 6px">${o.cover_text || 'Order'}</h3>
+            <div class="small">${o.photographer_name || ''} · ${o.album_type || 'Album'} · ${o.album_size || ''} · ${o.cover_material || ''} ${o.cover_color || ''} · ${o.spreads || ''} spreads</div>
+            <div class="small" style="margin-top:4px">Total: €${Number(o.total_price || 0).toFixed(2)}</div>
+          </div>
+          <div style="display:flex; gap:10px; align-items:start; flex-wrap:wrap">
+            <span class="chip">${o.status || 'pending'}</span>
+          </div>
+        </div>
+      </div>
+    `).join('');
+    return;
+  }
+  const list=readProjects().filter(p => p.userEmail===user.email).sort((a,b)=>String(b.created||'').localeCompare(String(a.created||'')) || String(b.id||'').localeCompare(String(a.id||'')));
   if(!list.length){ wrap.innerHTML='<div class="empty">No orders found yet.</div>'; return; }
   wrap.innerHTML=list.map(p=>`
     <div class="panel" style="margin-bottom:16px">
@@ -680,7 +805,7 @@ function setupOrders(){
         <div>
           <div class="kicker">${p.id}</div>
           <h3 style="margin:6px 0 6px"><a href="#" class="linkish" onclick="openDraft('${p.id}');return false;">${p.title}</a></h3>
-          <div class="small">${p.selectionType || p.albumType} · ${p.size} · ${p.cover} · ${p.spreads} spreads${p.sharedByGuest ? ' · Shared by guest' : ''}${isAdminUser(user) ? ' · Owner: ' + (p.userEmail || '—') : ''}</div>
+          <div class="small">${p.selectionType || p.albumType} · ${p.size} · ${p.cover} · ${p.spreads} spreads${p.sharedByGuest ? ' · Shared by guest' : ''}</div>
           <div class="small" style="margin-top:4px">${user.role === 'guest' ? 'Quote available through your photographer' : 'Estimate: €' + Number(p.price || 0).toFixed(2)}</div>
         </div>
         <div style="display:flex; gap:10px; align-items:start; flex-wrap:wrap">
@@ -692,6 +817,7 @@ function setupOrders(){
     </div>
   `).join('');
 }
+
 function setupNewOrder(){
   const user=ensureAuth(); if(!user) return;
   const form=document.getElementById('orderForm'); if(!form) return;
