@@ -1,25 +1,2 @@
-const SUPABASE_URL = "https://jbwlwbawssjimugtayts.supabase.co";
-const SUPABASE_KEY = "sb_publishable_fMXuCisXnwyFqYhBuQrrFg_38HgpDgK";
-
-const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-
-window.saveDraft = async function () {
-  const { data, error } = await supabaseClient
-    .from('drafts')
-    .insert([
-      {
-        draft_name: "Test Draft",
-        status: "draft",
-        photographer_name: "Test Photographer",
-        photographer_instagram: "@test"
-      }
-    ]);
-
-  if (error) {
-    console.error("Error saving draft:", error);
-    alert("Error saving draft");
-  } else {
-    console.log("Saved:", data);
-    alert("Draft saved successfully!");
-  }
-};
+window.SUPABASE_URL = "https://jbwlwbawssjimugtayts.supabase.co";
+window.SUPABASE_ANON_KEY = "sb_publishable_FMXuCisXnwyFyYNbUQrFfg_38HgpDGk";
