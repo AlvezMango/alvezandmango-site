@@ -72,43 +72,6 @@ function saveUsers(users){ try{ localStorage.setItem('am_users', JSON.stringify(
 function currentUser(){ return safeJsonParse(localStorage.getItem('am_current_user') || 'null', null); }
 function setCurrentUser(user){ try{ localStorage.setItem('am_current_user', JSON.stringify(user)); return true; }catch(e){ console.error('Unable to save current user', e); return false; } }
 function signOut(){ localStorage.removeItem('am_current_user'); location.href='login.html'; }
-
-const ADMIN_EMAILS = ['demo@alvezmango.com'];
-function isAdminUser(user){
-  if(!user) return false;
-  return user.role === 'admin' || ADMIN_EMAILS.includes(String(user.email || '').toLowerCase());
-}
-function getProjectOwnerLabel(project){
-  return project.ownerStudioName || project.ownerPhotographerName || project.userEmail || 'Unknown';
-}
-function getVisibleProjectsForUser(user){
-  const projects = readProjects();
-  if(isAdminUser(user)) return projects.slice();
-  return projects.filter(p => p.userEmail === user.email);
-}
-function getVisibleProjectById(user, id){
-  return getVisibleProjectsForUser(user).find(p => p.id === id) || null;
-}
-function countPendingApprovals(){
-  return readUsers().filter(u => u.role === 'photographer' && !u.approved).length;
-}
-function updateAdminNav(user){
-  if(!user) return;
-  document.querySelectorAll('[data-admin-only]').forEach(el => {
-    el.style.display = isAdminUser(user) ? '' : 'none';
-  });
-  document.querySelectorAll('[data-admin-label]').forEach(el => {
-    el.textContent = isAdminUser(user) ? 'Admin' : 'Dashboard';
-  });
-}
-function escapeHtml(value){
-  return String(value == null ? '' : value)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
 function readProjects(){ return safeJsonParse(localStorage.getItem('am_projects') || '[]', []); }
 function saveProjects(projects){ try{ localStorage.setItem('am_projects', JSON.stringify(projects)); return true; }catch(e){ console.error('Unable to save projects', e); return false; } }
 function uuid(){ return 'AM-' + Math.floor(Date.now()/1000).toString().slice(-6); }
@@ -580,37 +543,29 @@ function setupCoverModal(){
 
 
 function renderPendingApprovals(currentUser){
+  if(!currentUser || currentUser.email !== 'demo@alvezmango.com') return;
+
   const panel = document.getElementById('approvalPanel');
   const listEl = document.getElementById('approvalList');
-  if(!panel || !listEl) return;
-  if(!isAdminUser(currentUser)){
+
+  const users = readUsers();
+  const pending = users.filter(u => u.role === 'photographer' && !u.approved);
+
+  if(!pending.length){
     panel.style.display = 'none';
     return;
   }
 
-  const pending = readUsers().filter(u => u.role === 'photographer' && !u.approved);
-  if(!pending.length){
-    panel.style.display = 'block';
-    listEl.innerHTML = '<div class="empty">No pending photographer approvals right now.</div>';
-    return;
-  }
-
   panel.style.display = 'block';
+
   listEl.innerHTML = pending.map(u => `
-    <div class="panel" style="margin-bottom:12px;border:1px solid #e6ddd2">
-      <div style="display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;align-items:flex-start">
-        <div>
-          <strong>${escapeHtml(u.photographerName || u.studioName || 'Photographer')}</strong>
-          <div class="small" style="margin-top:4px">${escapeHtml(u.studioName || 'Studio not provided')}</div>
-          <div class="small" style="margin-top:4px">${escapeHtml(u.email || '—')}</div>
-          <div class="small" style="margin-top:4px">${escapeHtml([u.phone, u.city, u.country].filter(Boolean).join(' · ') || '—')}</div>
-          <div class="small" style="margin-top:4px">${escapeHtml(u.website || 'No website provided')}</div>
-        </div>
-        <div class="action-row">
-          <button onclick="approveUser('${escapeHtml(u.email || '')}')" class="btn">Approve</button>
-          <button onclick="deleteUser('${escapeHtml(u.email || '')}')" class="btn secondary">Delete</button>
-        </div>
-      </div>
+    <div class="panel" style="margin-bottom:12px">
+      <strong>${u.photographerName}</strong> (${u.email})<br>
+      <span class="small">${u.phone} · ${u.city} · ${u.country}</span><br>
+      <span class="small">${u.website}</span><br><br>
+
+      <button onclick="approveUser('${u.email}')" class="btn">Approve</button>
+      <button onclick="deleteUser('${u.email}')" class="btn secondary">Delete</button>
     </div>
   `).join('');
 }
@@ -650,42 +605,26 @@ function forgotPassword(){
 
 function setupDashboard(){
   const user=ensureAuth(); if(!user) return;
-  updateAdminNav(user);
   renderPendingApprovals(user);
-  const list=getVisibleProjectsForUser(user).sort((a,b)=>String(b.created||'').localeCompare(String(a.created||'')) || String(b.id||'').localeCompare(String(a.id||'')));
+  const list=readProjects().filter(p => p.userEmail===user.email).sort((a,b)=>String(b.created||'').localeCompare(String(a.created||'')) || String(b.id||'').localeCompare(String(a.id||'')));
+  renderPendingApprovals(user);
   const body=document.getElementById('projectRows');
-  const adminMode = isAdminUser(user);
-  const heading = document.getElementById('dashboardHeading');
-  const note = document.getElementById('dashboardNote');
-  if(heading) heading.textContent = adminMode ? 'Central admin dashboard' : 'Studio dashboard for ';
-  if(note) note.textContent = adminMode
-    ? 'Admin mode shows all photographer orders, pending approvals, and the latest activity across the system.'
-    : 'Photographer notifications: shared client drafts can be opened and converted into active projects.';
   if(document.getElementById('projectCount')) document.getElementById('projectCount').textContent=list.length;
-  if(document.getElementById('draftCount')) document.getElementById('draftCount').textContent=adminMode ? countPendingApprovals() : list.filter(p=>p.status==='Draft').length;
-  if(document.getElementById('reviewCount')) document.getElementById('reviewCount').textContent=adminMode ? list.filter(p=>p.status==='In review').length : list.filter(p=>p.status!=='Draft').length;
-  const draftLabel = document.getElementById('draftCountLabel');
-  const reviewLabel = document.getElementById('reviewCountLabel');
-  if(draftLabel) draftLabel.textContent = adminMode ? 'Pending approvals' : 'Drafts';
-  if(reviewLabel) reviewLabel.textContent = adminMode ? 'In review' : 'In review / active';
-  const recentTitle = document.getElementById('recentProjectsTitle');
-  if(recentTitle) recentTitle.textContent = adminMode ? 'Latest system orders' : 'Your albums';
-  const ownerHead = document.getElementById('ownerColumnHead');
-  if(ownerHead) ownerHead.style.display = adminMode ? '' : 'none';
+  if(document.getElementById('draftCount')) document.getElementById('draftCount').textContent=list.filter(p=>p.status==='Draft').length;
+  if(document.getElementById('reviewCount')) document.getElementById('reviewCount').textContent=list.filter(p=>p.status!=='Draft').length;
   if(body){
     if(!list.length){
-      body.innerHTML='<tr><td colspan="9"><div class="empty">No projects yet.</div></td></tr>';
+      body.innerHTML='<tr><td colspan="8"><div class="empty">No projects yet. Create your first album order.</div></td></tr>';
     }else{
-      body.innerHTML=list.slice(0, 12).map(p=>`
+      body.innerHTML=list.map(p=>`
       <tr>
-        <td><a href="#" class="linkish" onclick="openDraft('${p.id}');return false;">${escapeHtml(p.id)}</a></td>
-        <td><a href="#" class="linkish" onclick="openDraft('${p.id}');return false;">${escapeHtml(p.title || 'Untitled Project')}</a></td>
-        <td style="display:${adminMode ? '' : 'none'}">${escapeHtml(getProjectOwnerLabel(p))}</td>
-        <td>${escapeHtml(p.selectionType || p.albumType || 'Album')}</td>
-        <td>${escapeHtml(p.size || '—')}</td>
-        <td>${escapeHtml(p.cover || '—')}</td>
-        <td><span class="chip">${escapeHtml(p.status || 'Draft')}</span></td>
-        <td>${escapeHtml(p.created || '—')}</td>
+        <td><a href="#" class="linkish" onclick="openDraft('${p.id}');return false;">${p.id}</a></td>
+        <td><a href="#" class="linkish" onclick="openDraft('${p.id}');return false;">${p.title}</a></td>
+        <td>${p.selectionType || p.albumType}</td>
+        <td>${p.size}</td>
+        <td>${p.cover}</td>
+        <td><span class="chip">${p.status}</span></td>
+        <td>${p.created}</td>
         <td>
           <div class="action-row">
             <button onclick="openDraft('${p.id}')" class="btn secondary" style="padding:8px 12px">View</button>
@@ -717,72 +656,34 @@ function deleteDraft(id){
   if(!confirm('Delete this draft project?')) return;
   const user=currentUser();
   let projects=readProjects();
-  projects=projects.filter(p => {
-    if(p.id !== id || p.status !== 'Draft') return true;
-    if(isAdminUser(user)) return false;
-    return p.userEmail !== user.email;
-  });
+  projects=projects.filter(p => !(p.id===id && p.userEmail===user.email && p.status==='Draft'));
   saveProjects(projects);
   window.location.reload();
 }
 function setupOrders(){
   const user=ensureAuth(); if(!user) return;
-  updateAdminNav(user);
   renderPendingApprovals(user);
-  const adminMode = isAdminUser(user);
-  const list=getVisibleProjectsForUser(user).sort((a,b)=>String(b.created||'').localeCompare(String(a.created||'')) || String(b.id||'').localeCompare(String(a.id||'')));
+  const list=readProjects().filter(p => p.userEmail===user.email).sort((a,b)=>String(b.created||'').localeCompare(String(a.created||'')) || String(b.id||'').localeCompare(String(a.id||'')));
   const wrap=document.getElementById('ordersList');
-  const heading=document.getElementById('ordersHeading');
-  const note=document.getElementById('ordersNote');
-  const toolbar=document.getElementById('ordersToolbar');
-  if(heading) heading.textContent = adminMode ? 'All system orders' : 'All projects for ';
-  if(note) note.textContent = adminMode
-    ? 'Admin mode centralizes every photographer order in one place. Filter by status and inspect any project.'
-    : 'Orders page now supports the photographer workflow: open a shared client draft, modify it, upload spreads, and review pricing.';
-  if(toolbar) toolbar.style.display = adminMode ? 'flex' : 'none';
   if(!wrap) return;
   if(!list.length){ wrap.innerHTML='<div class="empty">No orders found yet.</div>'; return; }
-
-  const renderList = (statusFilter='all', search='') => {
-    const normalizedSearch = String(search || '').trim().toLowerCase();
-    const filtered = list.filter(p => {
-      const matchesStatus = statusFilter === 'all' ? true : String(p.status || '').toLowerCase() === statusFilter;
-      const hay = [p.id, p.title, p.userEmail, p.ownerStudioName, p.ownerPhotographerName, p.cover, p.size].join(' ').toLowerCase();
-      const matchesSearch = !normalizedSearch || hay.includes(normalizedSearch);
-      return matchesStatus && matchesSearch;
-    });
-    if(!filtered.length){
-      wrap.innerHTML='<div class="empty">No orders match the current filter.</div>';
-      return;
-    }
-    wrap.innerHTML=filtered.map(p=>`
-      <div class="panel" style="margin-bottom:16px">
-        <div style="display:flex;justify-content:space-between;gap:18px;flex-wrap:wrap">
-          <div>
-            <div class="kicker">${escapeHtml(p.id || '—')}</div>
-            <h3 style="margin:6px 0 6px"><a href="#" class="linkish" onclick="openDraft('${p.id}');return false;">${escapeHtml(p.title || 'Untitled Project')}</a></h3>
-            <div class="small">${escapeHtml(p.selectionType || p.albumType || 'Album')} · ${escapeHtml(p.size || '—')} · ${escapeHtml(p.cover || '—')} · ${escapeHtml(String(p.spreads || '—'))} spreads${p.sharedByGuest ? ' · Shared by guest' : ''}</div>
-            ${adminMode ? `<div class="small" style="margin-top:4px">Owner: ${escapeHtml(getProjectOwnerLabel(p))} · ${escapeHtml(p.userEmail || '—')}</div>` : ''}
-            <div class="small" style="margin-top:4px">${user.role === 'guest' ? 'Quote available through your photographer' : 'Estimate: €' + Number(p.price || 0).toFixed(2)}</div>
-          </div>
-          <div style="display:flex; gap:10px; align-items:start; flex-wrap:wrap">
-            <span class="chip">${escapeHtml(p.status || 'Draft')}</span>
-            <button onclick="openDraft('${p.id}')" class="btn secondary" style="padding:9px 12px">View draft</button>
-            ${p.status==='Draft' ? `<button onclick="deleteDraft('${p.id}')" class="btn secondary" style="padding:9px 12px">Delete draft</button>` : ''}
-          </div>
+  wrap.innerHTML=list.map(p=>`
+    <div class="panel" style="margin-bottom:16px">
+      <div style="display:flex;justify-content:space-between;gap:18px;flex-wrap:wrap">
+        <div>
+          <div class="kicker">${p.id}</div>
+          <h3 style="margin:6px 0 6px"><a href="#" class="linkish" onclick="openDraft('${p.id}');return false;">${p.title}</a></h3>
+          <div class="small">${p.selectionType || p.albumType} · ${p.size} · ${p.cover} · ${p.spreads} spreads${p.sharedByGuest ? ' · Shared by guest' : ''}</div>
+          <div class="small" style="margin-top:4px">${user.role === 'guest' ? 'Quote available through your photographer' : 'Estimate: €' + Number(p.price || 0).toFixed(2)}</div>
+        </div>
+        <div style="display:flex; gap:10px; align-items:start; flex-wrap:wrap">
+          <span class="chip">${p.status}</span>
+          <button onclick="openDraft('${p.id}')" class="btn secondary" style="padding:9px 12px">View draft</button>
+          ${p.status==='Draft' ? `<button onclick="deleteDraft('${p.id}')" class="btn secondary" style="padding:9px 12px">Delete draft</button>` : ''}
         </div>
       </div>
-    `).join('');
-  };
-
-  renderList();
-  if(toolbar){
-    const statusInput = document.getElementById('adminStatusFilter');
-    const searchInput = document.getElementById('adminOrderSearch');
-    const rerender = () => renderList(statusInput ? statusInput.value : 'all', searchInput ? searchInput.value : '');
-    if(statusInput) statusInput.onchange = rerender;
-    if(searchInput) searchInput.oninput = rerender;
-  }
+    </div>
+  `).join('');
 }
 function setupNewOrder(){
   const user=ensureAuth(); if(!user) return;
@@ -836,8 +737,6 @@ function setupNewOrder(){
     const item={
       id:uuid(),
       userEmail:user.email,
-      ownerStudioName:user.studioName || '',
-      ownerPhotographerName:user.photographerName || '',
       title:fd.get('projectTitle'),
       albumType:'Album',
       selectionType:fd.get('selectionType') || 'Album',
@@ -910,7 +809,7 @@ document.addEventListener('DOMContentLoaded', initPage);
 function setupDraftDetail(){
   const user = ensureAuth(); if(!user) return;
   const id = localStorage.getItem('am_current_project_id');
-  const project = getVisibleProjectById(user, id);
+  const project = getProjectById(id);
   const wrap = document.getElementById('draftDetailWrap');
   const noData = document.getElementById('draftDetailEmpty');
   if(!project){
@@ -963,8 +862,6 @@ function convertGuestDraft(targetEmail){
   const copy = {...project};
   copy.id = uuid();
   copy.userEmail = (targetEmail || '').trim().toLowerCase() || 'demo@alvezmango.com';
-  copy.ownerStudioName = copy.ownerStudioName || 'Shared guest draft';
-  copy.ownerPhotographerName = copy.ownerPhotographerName || 'Guest share';
   copy.status = 'Draft';
   copy.created = new Date().toISOString().slice(0,10);
   const quote = calcQuote(copy.size, Number(copy.spreads || 20), copy.selectionType || 'Album', Number(copy.quantity || 1), Number(copy.replicaQty || 2), copy.replicaSize || defaultReplicaSize(copy.size), !!copy.printOnCover, !!copy.pictureWindow, 'photographer');
@@ -980,7 +877,7 @@ function convertGuestDraft(targetEmail){
 function setupPhotographerDraftEditor(){
   const user = ensureAuth(); if(!user) return;
   const id = localStorage.getItem('am_current_project_id');
-  const project = getVisibleProjectById(user, id);
+  const project = getProjectById(id);
   const form = document.getElementById('photographerDraftForm');
   const empty = document.getElementById('photographerDraftEmpty');
   const wrap = document.getElementById('photographerDraftWrap');
@@ -1123,7 +1020,7 @@ function renderAlbumPreview(targetId, coverName, material, size){
 function setupGuestDraftEditor(){
   const user = ensureAuth(); if(!user) return;
   const id = localStorage.getItem('am_current_project_id');
-  const project = getVisibleProjectById(user, id);
+  const project = getProjectById(id);
   const form = document.getElementById('guestDraftForm');
   const empty = document.getElementById('guestDraftEmpty');
   const wrap = document.getElementById('guestDraftWrap');
@@ -1208,3 +1105,588 @@ function setupGuestDraftEditor(){
   }
 }
 
+
+/* =========================
+   Stable Supabase rebuild v1
+   admin + centralized orders
+   ========================= */
+const ADMIN_EMAILS = ['demo@alvezmango.com'];
+
+function escapeHtml(value){
+  return String(value ?? '')
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;')
+    .replace(/'/g,'&#39;');
+}
+function normalizeOrderStatus(status){
+  const raw = String(status || '').replaceAll('"','').trim().toLowerCase();
+  if(raw === 'draft') return 'Draft';
+  if(raw === 'approved') return 'Approved';
+  if(raw === 'in_production') return 'In production';
+  if(raw === 'delivered' || raw === 'shipped') return 'Shipped';
+  return raw === 'pending' || raw === 'submitted' || raw === '' ? 'In review' : raw.replace(/_/g,' ').replace(/\b\w/g, s => s.toUpperCase());
+}
+function dbDraftStatusFromUi(status){
+  const clean = String(status || '').toLowerCase();
+  if(clean === 'draft') return 'draft';
+  if(clean === 'approved') return 'approved';
+  if(clean === 'in production' || clean === 'in_production') return 'in_production';
+  if(clean === 'shipped') return 'delivered';
+  return clean === 'in review' ? 'pending' : 'draft';
+}
+function dbOrderStatusFromUi(status){
+  const clean = String(status || '').toLowerCase();
+  if(clean === 'approved') return 'approved';
+  if(clean === 'in production' || clean === 'in_production') return 'in_production';
+  if(clean === 'shipped') return 'delivered';
+  return 'pending';
+}
+function isAdminUser(user){
+  if(!user) return false;
+  const status = String(user.status || '').replaceAll('"','').toLowerCase();
+  return status === 'admin' || ADMIN_EMAILS.includes(String(user.email || '').toLowerCase());
+}
+async function getSessionUser(){
+  const client = getSupabaseClient();
+  if(!client || !client.auth) return null;
+  const { data, error } = await client.auth.getUser();
+  if(error) return null;
+  return data && data.user ? data.user : null;
+}
+async function getPhotographerByEmail(email){
+  const client = getSupabaseClient();
+  if(!client || !email) return null;
+  const { data, error } = await client.from('photographers').select('*').ilike('email', email).limit(1);
+  if(error) return null;
+  return data && data[0] ? data[0] : null;
+}
+async function buildCurrentUserFromSession(){
+  const authUser = await getSessionUser();
+  if(!authUser || !authUser.email) return null;
+  const row = await getPhotographerByEmail(authUser.email);
+  const merged = {
+    id: authUser.id,
+    email: authUser.email,
+    approved: row ? String(row.status || '').replaceAll('"','').toLowerCase() !== 'pending' : true,
+    role: row ? (isAdminUser(row) ? 'admin' : 'photographer') : 'photographer',
+    status: row ? String(row.status || '').replaceAll('"','').toLowerCase() : 'approved',
+    studioName: row && row.company_name ? row.company_name : (row && row.name ? row.name : authUser.email),
+    photographerName: row && row.name ? row.name : authUser.email,
+    phone: row && row.phone ? row.phone : '',
+    city: row && row.city ? row.city : '',
+    country: row && row.country ? row.country : '',
+    website: row && row.website ? row.website : '',
+    instagram: row && row.instagram ? row.instagram : ''
+  };
+  setCurrentUser(merged);
+  return merged;
+}
+async function ensureAuthFresh(){
+  let user = currentUser();
+  if(!user){
+    user = await buildCurrentUserFromSession();
+  }
+  if(!user){
+    location.href='login.html';
+    return null;
+  }
+  document.querySelectorAll('[data-user-name]').forEach(el=>el.textContent=user.photographerName || user.studioName || user.email);
+  document.querySelectorAll('[data-studio-name]').forEach(el=>el.textContent=user.studioName || user.photographerName || 'Your Studio');
+  document.querySelectorAll('[data-role]').forEach(el=>el.textContent=user.role || 'photographer');
+  return user;
+}
+async function signOut(){
+  const client = getSupabaseClient();
+  if(client && client.auth){
+    try{ await client.auth.signOut(); }catch(e){ console.error(e); }
+  }
+  localStorage.removeItem('am_current_user');
+  location.href='login.html';
+}
+async function saveDraftToSupabaseStable(item, user){
+  const client = getSupabaseClient();
+  if(!client) return { skipped:true };
+  const payload = {
+    draft_name: item.title || 'Untitled Project',
+    status: dbDraftStatusFromUi(item.status || 'Draft'),
+    album_type: item.selectionType || item.albumType || 'Album',
+    album_size: item.size || null,
+    cover_material: item.coverMaterial || null,
+    cover_color: item.cover || null,
+    cover_text: item.coverText || null,
+    font_choice: item.fontChoice || null,
+    spreads: Number(item.spreads || 0) || null,
+    has_parent_albums: item.selectionType === 'Set',
+    parent_album_type: item.selectionType === 'Set' ? (item.replicaSize || null) : null,
+    parent_album_qty: item.selectionType === 'Set' ? Number(item.replicaQty || 0) : null,
+    has_presentation_box: false,
+    total_price: Number(item.price || 0) || 0,
+    photographer_name: user && user.photographerName ? user.photographerName : null,
+    photographer_instagram: user && (user.instagram || user.website || user.email) ? (user.instagram || user.website || user.email) : null,
+    notes: [
+      item.printOnCover ? 'Print on cover: yes' : null,
+      item.pictureWindow ? 'Picture window: yes' : null,
+      user && user.email ? `owner_email:${user.email}` : null
+    ].filter(Boolean).join(' | ') || null,
+    is_submitted: item.status === 'In review'
+  };
+  const { data, error } = await client.from('drafts').insert([payload]).select().limit(1);
+  if(error) return { error };
+  return { data: data && data[0] ? data[0] : null };
+}
+async function saveOrderToSupabase(item, user, remoteDraftId){
+  const client = getSupabaseClient();
+  if(!client) return { skipped:true };
+  const orderNumber = item.id || ('AM-' + Date.now());
+  const payload = {
+    guest_id: null,
+    draft_id: remoteDraftId || null,
+    photographer_name: user && user.photographerName ? user.photographerName : null,
+    photographer_instagram: user && (user.instagram || user.website || user.email) ? (user.instagram || user.website || user.email) : null,
+    order_number: orderNumber,
+    status: dbOrderStatusFromUi(item.status || 'In review'),
+    album_type: item.selectionType || item.albumType || 'Album',
+    album_size: item.size || null,
+    cover_material: item.coverMaterial || null,
+    cover_color: item.cover || null,
+    cover_text: item.coverText || null,
+    font_choice: item.fontChoice || null,
+    spreads: Number(item.spreads || 0) || null,
+    parent_album_type: item.selectionType === 'Set' ? (item.replicaSize || null) : null,
+    parent_album_qty: item.selectionType === 'Set' ? Number(item.replicaQty || 0) : null,
+    has_presentation_box: false,
+    box_type: null,
+    total_price: Number(item.price || 0) || 0,
+    internal_notes: user && user.email ? `owner_email:${user.email}` : null,
+    production_notes: [
+      item.printOnCover ? 'Print on cover: yes' : null,
+      item.pictureWindow ? 'Picture window: yes' : null
+    ].filter(Boolean).join(' | ') || null
+  };
+  const { data, error } = await client.from('orders').insert([payload]).select().limit(1);
+  if(error) return { error };
+  return { data: data && data[0] ? data[0] : null };
+}
+function notesContainOwnerEmail(notes, email){
+  if(!notes || !email) return false;
+  return String(notes).toLowerCase().includes(`owner_email:${String(email).toLowerCase()}`);
+}
+async function fetchPendingPhotographers(){
+  const client = getSupabaseClient();
+  if(!client) return [];
+  const { data, error } = await client.from('photographers').select('*').order('created_at', { ascending:false });
+  if(error || !Array.isArray(data)) return [];
+  return data.filter(row => String(row.status || '').replaceAll('"','').toLowerCase() === 'pending');
+}
+async function approveUser(email){
+  const client = getSupabaseClient();
+  if(!client) return;
+  const { error } = await client.from('photographers').update({ status:'approved' }).ilike('email', email);
+  if(error){
+    showMessage('approvalMsg', 'Could not approve this photographer.', true);
+    return;
+  }
+  showMessage('approvalMsg', 'Photographer approved.', false);
+  await setupDashboard();
+}
+async function deleteUser(email){
+  if(!confirm('Delete this account?')) return;
+  const client = getSupabaseClient();
+  if(!client) return;
+  const { error } = await client.from('photographers').delete().ilike('email', email);
+  if(error){
+    showMessage('approvalMsg', 'Could not delete this photographer row.', true);
+    return;
+  }
+  showMessage('approvalMsg', 'Photographer removed from the photographer table.', false);
+  await setupDashboard();
+}
+async function renderPendingApprovals(currentUser){
+  const panel = document.getElementById('approvalPanel');
+  const listEl = document.getElementById('approvalList');
+  if(!panel || !listEl) return;
+  if(!isAdminUser(currentUser)){
+    panel.style.display = 'none';
+    return;
+  }
+  const pending = await fetchPendingPhotographers();
+  if(!pending.length){
+    panel.style.display = 'none';
+    return;
+  }
+  panel.style.display = 'block';
+  listEl.innerHTML = pending.map(u => `
+    <div class="panel" style="margin-bottom:12px">
+      <strong>${escapeHtml(u.name || 'Unnamed photographer')}</strong> (${escapeHtml(u.email || '')})<br>
+      <span class="small">${escapeHtml(u.phone || '—')} · ${escapeHtml(u.city || '—')} · ${escapeHtml(u.country || '—')}</span><br>
+      <span class="small">${escapeHtml(u.instagram || u.website || '')}</span><br><br>
+      <button onclick="approveUser('${escapeHtml(u.email || '')}')" class="btn">Approve</button>
+      <button onclick="deleteUser('${escapeHtml(u.email || '')}')" class="btn secondary">Delete</button>
+    </div>
+  `).join('');
+}
+async function fetchOrdersForUser(user){
+  const client = getSupabaseClient();
+  if(!client) return [];
+  let query = client.from('orders').select('*').order('created_at', { ascending:false });
+  if(!isAdminUser(user)){
+    const email = String(user.email || '').trim();
+    const name = String(user.photographerName || '').trim();
+    const insta = String(user.instagram || user.website || '').trim();
+    const { data, error } = await query;
+    if(error || !Array.isArray(data)) return [];
+    return data.filter(row => {
+      return (name && String(row.photographer_name || '') === name)
+        || (email && (String(row.photographer_instagram || '') === email || notesContainOwnerEmail(row.internal_notes, email)))
+        || (insta && String(row.photographer_instagram || '') === insta);
+    });
+  }
+  const { data, error } = await query;
+  if(error || !Array.isArray(data)) return [];
+  return data;
+}
+async function fetchDraftsForUser(user){
+  const client = getSupabaseClient();
+  if(!client) return [];
+  const { data, error } = await client.from('drafts').select('*').order('created_at', { ascending:false });
+  if(error || !Array.isArray(data)) return [];
+  if(isAdminUser(user)) return data;
+  const email = String(user.email || '').trim();
+  const name = String(user.photographerName || '').trim();
+  const insta = String(user.instagram || user.website || '').trim();
+  return data.filter(row => {
+    return (name && String(row.photographer_name || '') === name)
+      || (email && (String(row.photographer_instagram || '') === email || notesContainOwnerEmail(row.notes, email)))
+      || (insta && String(row.photographer_instagram || '') === insta);
+  });
+}
+function projectCardFromOrder(order){
+  return {
+    id: order.id,
+    displayId: order.order_number || order.id,
+    title: order.order_number || 'Order',
+    albumType: order.album_type || 'Album',
+    selectionType: order.album_type || 'Album',
+    size: order.album_size || '—',
+    cover: order.cover_color || '—',
+    coverMaterial: order.cover_material || '—',
+    spreads: order.spreads || '—',
+    status: normalizeOrderStatus(order.status),
+    created: order.created_at ? String(order.created_at).slice(0,10) : '—',
+    price: roundMoney(order.total_price || 0),
+    owner: order.photographer_name || '—',
+    remoteOrderId: order.id
+  };
+}
+function projectCardFromDraft(draft){
+  return {
+    id: draft.id,
+    displayId: draft.id,
+    title: draft.draft_name || 'Untitled Project',
+    albumType: draft.album_type || 'Album',
+    selectionType: draft.album_type || 'Album',
+    size: draft.album_size || '—',
+    cover: draft.cover_color || '—',
+    coverMaterial: draft.cover_material || '—',
+    spreads: draft.spreads || '—',
+    status: normalizeOrderStatus(draft.status),
+    created: draft.created_at ? String(draft.created_at).slice(0,10) : '—',
+    price: roundMoney(draft.total_price || 0),
+    owner: draft.photographer_name || '—',
+    remoteDraftId: draft.id
+  };
+}
+async function setupRegister(){
+  const form=document.getElementById('registerForm');
+  if(!form) return;
+  form.addEventListener('submit', async function(e){
+    e.preventDefault();
+    const client = getSupabaseClient();
+    if(!client){
+      showMessage('registerMsg','Supabase is not available on this page.', true);
+      return;
+    }
+    const data=Object.fromEntries(new FormData(form).entries());
+    const email = String(data.email || '').trim().toLowerCase();
+    const password = String(data.password || '');
+    const profile = {
+      email,
+      name: data.photographerName,
+      phone: data.phone,
+      instagram: data.website,
+      website: data.website,
+      city: data.city,
+      country: data.country,
+      status: 'pending'
+    };
+    const { error: authError } = await client.auth.signUp({ email, password });
+    if(authError){
+      showMessage('registerMsg', authError.message || 'Could not create the authentication account.', true);
+      return;
+    }
+    const existing = await getPhotographerByEmail(email);
+    if(!existing){
+      const { error: insertError } = await client.from('photographers').insert([profile]);
+      if(insertError){
+        showMessage('registerMsg', insertError.message || 'Authentication was created, but photographer profile insert failed.', true);
+        return;
+      }
+    }
+    showMessage('registerMsg','Account created successfully. It is now pending approval.', false);
+    form.reset();
+  }, { once:true });
+}
+async function setupLogin(){
+  const form=document.getElementById('loginForm');
+  if(!form) return;
+  const fillDemo=document.getElementById('fillDemo');
+  if(fillDemo){
+    fillDemo.addEventListener('click', function(){
+      document.getElementById('loginEmail').value='demo@alvezmango.com';
+      document.getElementById('loginPassword').value='demo123';
+    });
+  }
+  form.addEventListener('submit', async function(e){
+    e.preventDefault();
+    const client = getSupabaseClient();
+    if(!client){
+      showMessage('loginMsg','Supabase is not available on this page.', true);
+      return;
+    }
+    const email=document.getElementById('loginEmail').value.trim().toLowerCase();
+    const password=document.getElementById('loginPassword').value;
+    const { error } = await client.auth.signInWithPassword({ email, password });
+    if(error){
+      showMessage('loginMsg', error.message || 'Email or password not found.', true);
+      return;
+    }
+    const user = await buildCurrentUserFromSession();
+    if(!user){
+      showMessage('loginMsg','Login succeeded, but the photographer profile was not found.', true);
+      return;
+    }
+    if(String(user.status || '').toLowerCase() === 'pending'){
+      await client.auth.signOut();
+      localStorage.removeItem('am_current_user');
+      showMessage('loginMsg','Your account is pending approval.', true);
+      return;
+    }
+    location.href='dashboard.html';
+  }, { once:true });
+}
+async function forgotPassword(){
+  const client = getSupabaseClient();
+  if(!client) return alert('Supabase is not available on this page.');
+  const email = prompt('Enter your email:');
+  if(!email) return;
+  const { error } = await client.auth.resetPasswordForEmail(email, {
+    redirectTo: window.location.origin + '/login.html'
+  });
+  if(error){
+    alert(error.message || 'Could not send reset email.');
+    return;
+  }
+  alert('Password reset email sent if the account exists.');
+}
+async function setupDashboard(){
+  const user = await ensureAuthFresh();
+  if(!user) return;
+  await renderPendingApprovals(user);
+  const orders = await fetchOrdersForUser(user);
+  const drafts = await fetchDraftsForUser(user);
+  const combined = [
+    ...drafts.map(projectCardFromDraft),
+    ...orders.map(projectCardFromOrder)
+  ].sort((a,b)=> String(b.created||'').localeCompare(String(a.created||'')) || String(b.id||'').localeCompare(String(a.id||'')));
+  const body=document.getElementById('projectRows');
+  if(document.getElementById('projectCount')) document.getElementById('projectCount').textContent=combined.length;
+  if(document.getElementById('draftCount')) document.getElementById('draftCount').textContent=combined.filter(p=>p.status==='Draft').length;
+  if(document.getElementById('reviewCount')) document.getElementById('reviewCount').textContent=combined.filter(p=>p.status!=='Draft').length;
+  if(body){
+    if(!combined.length){
+      body.innerHTML='<tr><td colspan="8"><div class="empty">No projects yet. Create your first album order.</div></td></tr>';
+    }else{
+      body.innerHTML=combined.slice(0,12).map(p=>`
+      <tr>
+        <td>${escapeHtml(p.displayId || p.id)}</td>
+        <td>${escapeHtml(p.title)}</td>
+        <td>${escapeHtml(p.selectionType || p.albumType || 'Album')}</td>
+        <td>${escapeHtml(p.size)}</td>
+        <td>${escapeHtml(p.cover)}</td>
+        <td><span class="chip">${escapeHtml(p.status)}</span></td>
+        <td>${escapeHtml(p.created)}</td>
+        <td><div class="action-row"><a class="btn secondary" href="orders.html" style="padding:8px 12px">Open</a></div></td>
+      </tr>`).join('');
+    }
+  }
+}
+function renderOrderFilters(isAdmin){
+  const wrap = document.getElementById('ordersControls');
+  if(!wrap) return;
+  wrap.innerHTML = `
+    <div class="panel" style="margin-bottom:18px">
+      <div class="form-grid">
+        <div class="field">
+          <label>Search</label>
+          <input id="orderSearch" placeholder="Search order number, photographer, album, size">
+        </div>
+        <div class="field">
+          <label>Status</label>
+          <select id="orderStatusFilter">
+            <option value="all">All statuses</option>
+            <option value="In review">In review</option>
+            <option value="Approved">Approved</option>
+            <option value="In production">In production</option>
+            <option value="Shipped">Shipped</option>
+          </select>
+        </div>
+        ${isAdmin ? `<div class="field"><label>View</label><div class="notice" style="margin-top:0">Admin view: all orders from every photographer.</div></div>` : ''}
+      </div>
+    </div>`;
+}
+function renderOrdersList(records, user){
+  const wrap=document.getElementById('ordersList');
+  if(!wrap) return;
+  const search = String((document.getElementById('orderSearch') || {}).value || '').trim().toLowerCase();
+  const status = String((document.getElementById('orderStatusFilter') || {}).value || 'all');
+  const filtered = records.filter(p => {
+    const hay = [p.displayId, p.title, p.owner, p.albumType, p.selectionType, p.size, p.cover, p.status].join(' ').toLowerCase();
+    const searchOk = !search || hay.includes(search);
+    const statusOk = status === 'all' || p.status === status;
+    return searchOk && statusOk;
+  });
+  if(!filtered.length){ wrap.innerHTML='<div class="empty">No orders found for the current filters.</div>'; return; }
+  wrap.innerHTML=filtered.map(p=>`
+    <div class="panel" style="margin-bottom:16px">
+      <div style="display:flex;justify-content:space-between;gap:18px;flex-wrap:wrap">
+        <div>
+          <div class="kicker">${escapeHtml(p.displayId || p.id)}</div>
+          <h3 style="margin:6px 0 6px">${escapeHtml(p.title)}</h3>
+          <div class="small">${escapeHtml(p.selectionType || p.albumType)} · ${escapeHtml(p.size)} · ${escapeHtml(p.cover)} · ${escapeHtml(p.spreads)} spreads</div>
+          ${isAdminUser(user) ? `<div class="small" style="margin-top:4px">Photographer: ${escapeHtml(p.owner || '—')}</div>` : ''}
+          <div class="small" style="margin-top:4px">Estimate: €${Number(p.price || 0).toFixed(2)}</div>
+        </div>
+        <div style="display:flex; gap:10px; align-items:start; flex-wrap:wrap">
+          <span class="chip">${escapeHtml(p.status)}</span>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+async function setupOrders(){
+  const user=await ensureAuthFresh();
+  if(!user) return;
+  await renderPendingApprovals(user);
+  renderOrderFilters(isAdminUser(user));
+  const orders = await fetchOrdersForUser(user);
+  const records = orders.map(projectCardFromOrder);
+  renderOrdersList(records, user);
+  ['orderSearch','orderStatusFilter'].forEach(id => {
+    const el = document.getElementById(id);
+    if(el){
+      el.addEventListener('input', () => renderOrdersList(records, user));
+      el.addEventListener('change', () => renderOrdersList(records, user));
+    }
+  });
+}
+async function setupNewOrder(){
+  const user=await ensureAuthFresh(); if(!user) return;
+  const form=document.getElementById('orderForm'); if(!form) return;
+  const isGuest = user.role === 'guest';
+  ensureCoreOrderFields(form, isGuest ? 'Your names / project title' : 'Project title');
+  const quoteEl=document.getElementById('quotePrice');
+  renderMaterialTabs('Linen');
+  updateCoverTrigger('Linen Sand');
+  setupCoverModal();
+  const shareForm = document.getElementById('shareForm');
+  if(shareForm) shareForm.style.display = 'none';
+  function updateQuote(){
+    const fd=new FormData(form);
+    applyPricingSelectionBehavior(form);
+    const result=getPricingResult(
+      fd.get('selectionType') || 'Album',
+      fd.get('size'),
+      Number(fd.get('spreads') || 20),
+      Number(fd.get('quantity') || 1),
+      Number(fd.get('replicaQty') || 2),
+      fd.get('replicaSize') || defaultReplicaSize(fd.get('size')),
+      fd.get('printOnCover') === 'yes',
+      fd.get('pictureWindow') === 'yes',
+      user.role
+    );
+    if(quoteEl) quoteEl.textContent=result.display;
+    const hint=document.getElementById('quoteHint');
+    if(hint) hint.textContent=result.note;
+  }
+  form.addEventListener('input', updateQuote);
+  form.addEventListener('change', updateQuote);
+  updateQuote();
+  form.addEventListener('submit', async function(e){
+    e.preventDefault();
+    const submitter = e.submitter;
+    const action = submitter && submitter.value ? submitter.value : 'save';
+    const fd=new FormData(form);
+    const pricingResult=getPricingResult(
+      fd.get('selectionType') || 'Album',
+      fd.get('size'),
+      Number(fd.get('spreads') || 20),
+      Number(fd.get('quantity') || 1),
+      Number(fd.get('replicaQty') || 2),
+      fd.get('replicaSize') || defaultReplicaSize(fd.get('size')),
+      fd.get('printOnCover') === 'yes',
+      fd.get('pictureWindow') === 'yes',
+      user.role
+    );
+    const projects=readProjects();
+    const item={
+      id:uuid(),
+      userEmail:user.email,
+      title:fd.get('projectTitle'),
+      albumType:'Album',
+      selectionType:fd.get('selectionType') || 'Album',
+      size:fd.get('size'),
+      cover:fd.get('cover'),
+      coverMaterial:fd.get('coverMaterial') || document.getElementById('coverMaterialInput').value,
+      spreads:Number(fd.get('spreads') || 20),
+      quantity:Number(fd.get('quantity') || 1),
+      replicaQty:Number(fd.get('replicaQty') || 2),
+      replicaSize:fd.get('replicaSize') || defaultReplicaSize(fd.get('size')),
+      printOnCover: fd.get('printOnCover') === 'yes',
+      pictureWindow: fd.get('pictureWindow') === 'yes',
+      status: action === 'place-order' ? 'In review' : 'Draft',
+      created:new Date().toISOString().slice(0,10),
+      price: roundMoney(pricingResult.value || 0)
+    };
+    const remoteDraftResult = await saveDraftToSupabaseStable(item, user);
+    if(remoteDraftResult && remoteDraftResult.data && remoteDraftResult.data.id){
+      item.remoteId = remoteDraftResult.data.id;
+    }
+    let remoteOrderError = null;
+    if(action === 'place-order'){
+      const remoteOrderResult = await saveOrderToSupabase(item, user, item.remoteId || null);
+      if(remoteOrderResult && remoteOrderResult.error) remoteOrderError = remoteOrderResult.error;
+      if(remoteOrderResult && remoteOrderResult.data && remoteOrderResult.data.id){
+        item.remoteOrderId = remoteOrderResult.data.id;
+      }
+    }
+    projects.unshift(item);
+    if(!saveProjects(projects)){
+      showMessage('orderMsg','Unable to save the project in browser storage. Please allow local storage and try again.', true);
+      return;
+    }
+    localStorage.setItem('am_current_project_id', item.id);
+    const saveMsg = user.role==='guest'
+      ? 'Preview saved. Opening the preview editor now.'
+      : (action === 'place-order' ? 'Order placed. Opening your orders page now.' : 'Project saved. Opening your orders page now.');
+    const failed = !!((remoteDraftResult && remoteDraftResult.error) || remoteOrderError);
+    showMessage('orderMsg', failed ? saveMsg + ' Database sync partly failed, but the local save is safe.' : saveMsg, failed);
+    location.href = user.role==='guest' ? 'guest-draft-edit.html' : 'orders.html';
+  }, { once:true });
+}
+
+window.approveUser = approveUser;
+window.deleteUser = deleteUser;
+window.forgotPassword = forgotPassword;
+window.signOut = signOut;
