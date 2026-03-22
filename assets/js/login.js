@@ -1,5 +1,5 @@
 (function(){
-  const ADMIN_EMAILS = ['admin@alvezmango.com', 'demo@alvezmango.com'];
+  const ADMIN_EMAILS = ['admin@alvezandmango.com', 'demo@alvezandmango.com'];
 
   function showMessage(text, isError){
     const el = document.getElementById('loginMsg');
@@ -51,10 +51,11 @@
   }
 
   async function loadPhotographerProfile(client, email){
+    const normalizedEmail = String(email || '').trim().toLowerCase();
     const { data, error } = await client
       .from('photographers')
       .select('*')
-      .ilike('email', email)
+      .ilike('email', normalizedEmail)
       .limit(1)
       .maybeSingle();
     if(error) throw error;
@@ -64,7 +65,7 @@
   async function handleLogin(event){
     event.preventDefault();
     const btn = document.getElementById('loginBtn');
-    const email = document.getElementById('loginEmail').value.trim().toLowerCase();
+    const typedEmail = document.getElementById('loginEmail').value.trim().toLowerCase();
     const password = document.getElementById('loginPassword').value;
 
     try{
@@ -78,30 +79,46 @@
       }
 
       const client = getClient();
-      const { data, error } = await client.auth.signInWithPassword({ email, password });
+      const { data, error } = await client.auth.signInWithPassword({
+        email: typedEmail,
+        password
+      });
+
       if(error) throw error;
       if(!data || !data.user) throw new Error('Login succeeded but no user was returned.');
 
+      const realEmail = String(data.user.email || '').trim().toLowerCase();
+      if(!realEmail) throw new Error('Login succeeded but no email was returned from Supabase.');
+
       let profile = null;
       try{
-        profile = await loadPhotographerProfile(client, email);
+        profile = await loadPhotographerProfile(client, realEmail);
       }catch(profileErr){
         throw new Error('Logged in, but could not read the photographers table: ' + profileErr.message);
       }
 
-      if(profile && String(profile.status || '').replaceAll('"','').toLowerCase() === 'pending'){
+      if(!profile){
+        await client.auth.signOut();
+        showMessage('Your login works, but no photographer profile was found for this email.', true);
+        return;
+      }
+
+      const profileStatus = String(profile.status || '').replaceAll('"','').trim().toLowerCase();
+
+      if(profileStatus === 'pending'){
         await client.auth.signOut();
         showMessage('Your account is pending approval.', true);
         return;
       }
 
-      const role = ADMIN_EMAILS.includes(email) ? 'admin' : 'photographer';
+      const role = ADMIN_EMAILS.includes(realEmail) ? 'admin' : 'photographer';
+
       saveCurrentUser({
         id: data.user.id,
-        email,
+        email: realEmail,
         role,
-        approved: !profile || String(profile.status || '').replaceAll('"','').toLowerCase() !== 'pending',
-        photographerName: profile?.name || data.user.user_metadata?.name || email,
+        approved: profileStatus !== 'pending',
+        photographerName: profile?.name || data.user.user_metadata?.name || realEmail,
         studioName: profile?.company_name || profile?.company || profile?.name || 'Photographer',
         website: profile?.website || '',
         instagram: profile?.instagram || '',
@@ -146,10 +163,11 @@
     const fillDemo = document.getElementById('fillDemo');
     if(fillDemo){
       fillDemo.addEventListener('click', function(){
-        document.getElementById('loginEmail').value = 'admin@alvezmango.com';
-        document.getElementById('loginPassword').value = 'demo123';
+        document.getElementById('loginEmail').value = 'admin@alvezandmango.com';
+        document.getElementById('loginPassword').value = '';
       });
     }
+
     document.getElementById('loginForm')?.addEventListener('submit', handleLogin);
     document.getElementById('forgotPasswordLink')?.addEventListener('click', handleForgotPassword);
 
