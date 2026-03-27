@@ -787,3 +787,29 @@ body[data-page="guest-preview"] .contact-inline{
     grid-template-columns:1fr !important;
   }
 }
+
+
+body[data-page] .swatch-sample img,
+body[data-page] .cover-thumb img{
+  width:100%;
+  height:100%;
+  object-fit:cover;
+  display:block;
+}
+
+
+body[data-page] .swatch-sample img,
+body[data-page] #selectedCoverThumb img,
+body[data-page] .selected-cover-thumb img,
+body[data-page] .category-card img{
+  width:100% !important;
+  height:100% !important;
+  object-fit:cover !important;
+  display:block !important;
+  flex:none !important;
+}
+
+body[data-page] #selectedCoverThumb,
+body[data-page] .selected-cover-thumb{
+  overflow:hidden !important;
+}

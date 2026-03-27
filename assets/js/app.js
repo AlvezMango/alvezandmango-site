@@ -874,6 +874,12 @@ function coverMaterials(){
     ]
   };
 }
+
+function resolveAssetUrl(path){
+  if(!path) return '';
+  try{ return new URL(path, window.location.href).href; }catch(e){ return path; }
+}
+
 function coverSwatches(material){
   const mats = coverMaterials();
   return mats[material] || mats['Linen'];
@@ -881,23 +887,29 @@ function coverSwatches(material){
 function getAllCovers(){
   return Object.values(coverMaterials()).flat();
 }
+function getDefaultCover(material='Linen'){
+  const swatches = coverSwatches(material);
+  return swatches && swatches.length ? swatches[0] : getAllCovers()[0];
+}
 function getCoverByName(name){
-  return getAllCovers().find(item => item.name === name) || coverSwatches('Linen')[0];
+  return getAllCovers().find(item => item.name === name) || getDefaultCover('Linen');
 }
 function updateCoverTrigger(selectedName){
   const item = getCoverByName(selectedName);
+  if(!item) return;
   const nameEl = document.getElementById('selectedCoverName');
   const materialEl = document.getElementById('selectedCoverMaterial');
   const thumbEl = document.getElementById('selectedCoverThumb');
   if(nameEl) nameEl.textContent = item.name;
   if(materialEl) materialEl.textContent = item.material;
   if(thumbEl){
-    if(item.image){
-      thumbEl.style.backgroundImage = `url(${item.image})`;
+    const resolvedImage = resolveAssetUrl(item.image || '');
+    if(resolvedImage){
+      thumbEl.innerHTML = `<img src="${resolvedImage}" alt="${item.name}" style="width:100%;height:100%;object-fit:cover;display:block;">`;
+      thumbEl.style.backgroundImage = `url(${resolvedImage})`;
       thumbEl.style.backgroundColor = 'transparent';
-      thumbEl.style.backgroundSize = 'cover';
-      thumbEl.style.backgroundPosition = 'center';
     } else {
+      thumbEl.innerHTML = '';
       thumbEl.style.backgroundImage = 'none';
       thumbEl.style.backgroundColor = item.color || '#e7dfd4';
     }
@@ -945,15 +957,17 @@ function renderCoverSwatches(selectedName, material){
   const mat = material || currentSelectedMaterial();
   const wrap=document.getElementById('coverSwatches');
   if(!wrap) return;
-  wrap.innerHTML=coverSwatches(mat).map(item => `
+  wrap.innerHTML=coverSwatches(mat).map(item => {
+    const resolvedImage = resolveAssetUrl(item.image || '');
+    return `
     <div class="swatch-option ${selectedName===item.name ? 'selected':''}" data-cover="${item.name}" data-material="${item.material}">
-      <div class="swatch-sample" style="background-image:url(${item.image}); background-size:cover; background-position:center;"></div>
+      <div class="swatch-sample">${resolvedImage ? `<img src="${resolvedImage}" alt="${item.name}" style="width:100%;height:100%;object-fit:cover;display:block;">` : ''}</div>
       <div class="swatch-meta">
         <h4>${item.name}</h4>
         <div class="small">${item.material}</div>
       </div>
     </div>
-  `).join('');
+  `}).join('');
   wrap.querySelectorAll('.swatch-option').forEach(card=>{
     card.addEventListener('click', function(){
       const val=this.getAttribute('data-cover');
@@ -1224,7 +1238,12 @@ function setupNewOrder(){
   ensureCoreOrderFields(form, isGuest ? 'Your names / project title' : 'Project title');
   const quoteEl=document.getElementById('quotePrice');
   renderMaterialTabs('Linen');
-  updateCoverTrigger('Linen 01');
+  const initialCover = getDefaultCover('Linen');
+  const coverInput = document.getElementById('coverInput');
+  const coverMaterialInput = document.getElementById('coverMaterialInput');
+  if(coverInput && !getAllCovers().some(item => item.name === coverInput.value)) coverInput.value = initialCover.name;
+  if(coverMaterialInput && !coverMaterials()[coverMaterialInput.value]) coverMaterialInput.value = initialCover.material;
+  updateCoverTrigger((coverInput && coverInput.value) || initialCover.name);
   setupCoverModal();
   const shareForm = document.getElementById('shareForm');
   if(shareForm) shareForm.style.display = 'none';
@@ -1433,8 +1452,9 @@ function setupPhotographerDraftEditor(){
   form.replicaQty.value = project.replicaQty ?? 2;
   form.printOnCover.value = project.printOnCover ? 'yes' : 'no';
   form.pictureWindow.value = project.pictureWindow ? 'yes' : 'no';
-  document.getElementById('coverInput').value = project.cover || 'Linen 01';
-  document.getElementById('coverMaterialInput').value = project.coverMaterial || getCoverByName(project.cover || 'Linen 01').material;
+  const fallbackCover = getDefaultCover('Linen');
+  document.getElementById('coverInput').value = project.cover || fallbackCover.name;
+  document.getElementById('coverMaterialInput').value = project.coverMaterial || getCoverByName(project.cover || fallbackCover.name).material;
   renderMaterialTabs(document.getElementById('coverMaterialInput').value);
   updateCoverTrigger(document.getElementById('coverInput').value);
   setupCoverModal();
@@ -1534,13 +1554,13 @@ function makeUploadList(targetId){
 function renderAlbumPreview(targetId, coverName, material, size){
   const wrap = document.getElementById(targetId);
   if(!wrap) return;
-  const cover = getCoverByName(coverName || 'Linen 01');
+  const cover = getCoverByName(coverName || getDefaultCover('Linen').name);
   wrap.innerHTML = `
     <div class="album-preview-card">
       <div class="album-book" style="background:${cover.color};"></div>
       <div>
         <div class="kicker">Album preview</div>
-        <h4 style="font-size:24px;font-family:Georgia,serif;margin:6px 0 8px">${coverName || 'Linen 01'}</h4>
+        <h4 style="font-size:24px;font-family:Georgia,serif;margin:6px 0 8px">${coverName || getDefaultCover('Linen').name}</h4>
         <div class="small">${material || cover.material} · ${size || '30×30'}</div>
         <div class="note-strip">This is a simple visual mockup of the chosen cover. Later this can become a richer 3D preview.</div>
       </div>
@@ -1576,8 +1596,9 @@ function setupGuestDraftEditor(){
   form.replicaQty.value = project.replicaQty ?? 2;
   form.printOnCover.value = project.printOnCover ? 'yes' : 'no';
   form.pictureWindow.value = project.pictureWindow ? 'yes' : 'no';
-  document.getElementById('coverInput').value = project.cover || 'Linen 01';
-  document.getElementById('coverMaterialInput').value = project.coverMaterial || getCoverByName(project.cover || 'Linen 01').material;
+  const fallbackCover = getDefaultCover('Linen');
+  document.getElementById('coverInput').value = project.cover || fallbackCover.name;
+  document.getElementById('coverMaterialInput').value = project.coverMaterial || getCoverByName(project.cover || fallbackCover.name).material;
   renderMaterialTabs(document.getElementById('coverMaterialInput').value);
   updateCoverTrigger(document.getElementById('coverInput').value);
   setupCoverModal();
